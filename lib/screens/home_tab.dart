@@ -8,51 +8,70 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
-  // The state specific to the Home Tab
-  String _selectedZone = 'Zone A: Tropical Ferns'; 
+  final ScrollController _scrollController = ScrollController();
+
+  String _selectedZone = 'Zone A: Seeding Chamber'; 
   final List<String> _zones = [
-    'Zone A: Tropical Ferns', 
-    'Zone B: Succulent Bay', 
-    'Zone C: Rare Orchids', 
+    'Zone A: Seeding Chamber',  
+    'Zone B: Harvest Ready Bay', 
+    'Zone C: Idle', 
     'All Zones'
   ];
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildGreetingAndWeatherWidget(),
-            const SizedBox(height: 16),
-            _buildZoneDropdown(),
-            const SizedBox(height: 24),
-            
-            const Text('OVERALL HEALTH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), letterSpacing: 1.2)),
-            const SizedBox(height: 8),
-            _buildHealthWidget(),
-            const SizedBox(height: 24),
+    String currentZoneType = 'A';
+    if (_selectedZone.contains('Zone B')) currentZoneType = 'B';
+    if (_selectedZone.contains('Zone C')) currentZoneType = 'C';
+    if (_selectedZone.contains('All Zones')) currentZoneType = 'ALL';
 
-            _buildLiveTelemetryWidget(),
-            const SizedBox(height: 32), 
+    return Scrollbar(
+      controller: _scrollController,
+      thumbVisibility: true, 
+      thickness: 6.0,
+      radius: const Radius.circular(10),
+      child: SingleChildScrollView(
+        controller: _scrollController, 
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildGreetingAndWeatherWidget(),
+              const SizedBox(height: 16),
+              _buildZoneDropdown(),
+              const SizedBox(height: 24),
+              
+              const Text('OVERALL HEALTH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), letterSpacing: 1.2)),
+              const SizedBox(height: 8),
+              _buildHealthWidget(currentZoneType),
+              const SizedBox(height: 24),
 
-            _buildActiveAlertsWidget(),
-            const SizedBox(height: 32),
+              _buildLiveTelemetryWidget(currentZoneType),
+              const SizedBox(height: 32), 
 
-            _buildNextActionsWidget(),
-            const SizedBox(height: 24),
+              _buildActiveAlertsWidget(currentZoneType),
+              const SizedBox(height: 32),
 
-            _buildAIPredictionWidget(),
-            const SizedBox(height: 40),
-          ],
+              _buildNextActionsWidget(currentZoneType),
+              const SizedBox(height: 24),
+
+              _buildAIPredictionWidget(currentZoneType),
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // --- HELPER WIDGETS FOR HOME TAB ---
+  // --- HELPER WIDGETS ---
 
   Widget _buildGreetingAndWeatherWidget() {
     return Container(
@@ -70,11 +89,11 @@ class _HomeTabState extends State<HomeTab> {
         children: [
           const Text.rich(
             TextSpan(
-              text: 'Hi, ',
+              text: 'Hi, ', 
               style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF333333)), 
               children: [
                 TextSpan(text: 'Zhi Lim', style: TextStyle(color: Colors.green)), 
-                TextSpan(text: '! 👋'),
+                TextSpan(text: '!'), 
               ],
             ),
           ),
@@ -173,7 +192,7 @@ class _HomeTabState extends State<HomeTab> {
                 children: [
                   const Icon(Icons.local_florist, color: Color(0xFF064E3B), size: 22),
                   const SizedBox(width: 12),
-                  Text(value, style: const TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.bold, fontSize: 15)),
+                  Text(value, style: const TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.bold, fontSize: 13)), 
                 ],
               ),
             );
@@ -188,11 +207,42 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildHealthWidget() {
-    const Color mainBgColor = Color(0xFFA1E6A1); 
-    const Color darkGreen = Color(0xFF064E3B);
-    const Color progressFillColor = Color.fromARGB(255, 62, 154, 109); 
-    const Color progressTrackColor = Color(0xFFE8F5E9); 
+  Widget _buildHealthWidget(String zoneType) {
+    Color mainBgColor = const Color(0xFFA1E6A1); 
+    Color darkGreen = const Color(0xFF064E3B);
+    Color progressFillColor = const Color.fromARGB(255, 62, 154, 109); 
+    Color progressTrackColor = const Color(0xFFE8F5E9); 
+
+    String healthStatus;
+    String healthDesc;
+    double progressValue;
+    String percentage;
+
+    if (zoneType == 'A') {
+      healthStatus = 'Excellent';
+      healthDesc = 'Early growth stage optimal';
+      progressValue = 0.94;
+      percentage = '94%';
+    } else if (zoneType == 'B') {
+      healthStatus = 'Peak';
+      healthDesc = 'Ready for harvest window';
+      progressValue = 0.99;
+      percentage = '99%';
+    } else if (zoneType == 'C') {
+      mainBgColor = Colors.grey.shade200;
+      darkGreen = Colors.grey.shade700;
+      progressFillColor = Colors.grey.shade500;
+      progressTrackColor = Colors.grey.shade300;
+      healthStatus = 'Standby';
+      healthDesc = 'No active crops assigned';
+      progressValue = 0.0;
+      percentage = '0%';
+    } else {
+      healthStatus = 'Optimal';
+      healthDesc = 'Greenhouse overall average';
+      progressValue = 0.96;
+      percentage = '96%';
+    }
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -203,15 +253,17 @@ class _HomeTabState extends State<HomeTab> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('HEALTH INDEX', style: TextStyle(color: darkGreen.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-              const SizedBox(height: 4),
-              const Text('Excellent', style: TextStyle(color: darkGreen, fontSize: 32, fontWeight: FontWeight.w900)),
-              const SizedBox(height: 8),
-              Text('Optimal growing conditions', style: TextStyle(color: darkGreen, fontSize: 13, fontWeight: FontWeight.w500)),
-            ],
+          Expanded( 
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('HEALTH INDEX', style: TextStyle(color: darkGreen.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                const SizedBox(height: 4),
+                Text(healthStatus, style: TextStyle(color: darkGreen, fontSize: 30, fontWeight: FontWeight.w900)),
+                const SizedBox(height: 8),
+                Text(healthDesc, style: TextStyle(color: darkGreen, fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
+            ),
           ),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -223,13 +275,13 @@ class _HomeTabState extends State<HomeTab> {
                     height: 70, 
                     width: 70,
                     child: CircularProgressIndicator(
-                      value: 0.94, 
+                      value: progressValue, 
                       backgroundColor: progressTrackColor,
-                      valueColor: const AlwaysStoppedAnimation<Color>(progressFillColor),
+                      valueColor: AlwaysStoppedAnimation<Color>(progressFillColor),
                       strokeWidth: 8, 
                     ),
                   ),
-                  const Text('94%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: darkGreen)),
+                  Text(percentage, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: darkGreen)),
                 ],
               ),
             ],
@@ -239,7 +291,59 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildLiveTelemetryWidget() {
+  Widget _buildLiveTelemetryWidget(String zoneType) {
+    List<Widget> telemetryPills;
+
+    if (zoneType == 'A') {
+      telemetryPills = [
+        _buildTelemetryPill('MOIST', '85%', Icons.water_drop, 'optimal'), 
+        const SizedBox(width: 10),
+        _buildTelemetryPill('LUX', '800', Icons.light_mode, 'optimal'), 
+        const SizedBox(width: 10),
+        _buildTelemetryPill('TEMP', '24°', Icons.thermostat, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('PH', '6.2', Icons.science, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('HUMID', '90%', Icons.air, 'warning'),
+      ];
+    } else if (zoneType == 'B') {
+      telemetryPills = [
+        _buildTelemetryPill('MOIST', '40%', Icons.water_drop, 'warning'), 
+        const SizedBox(width: 10),
+        _buildTelemetryPill('LUX', '1.8k', Icons.light_mode, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('TEMP', '26°', Icons.thermostat, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('PH', '6.5', Icons.science, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('HUMID', '55%', Icons.air, 'optimal'),
+      ];
+    } else if (zoneType == 'C') {
+      telemetryPills = [
+        _buildTelemetryPill('MOIST', '--', Icons.water_drop, 'idle'), 
+        const SizedBox(width: 10),
+        _buildTelemetryPill('LUX', '--', Icons.light_mode, 'idle'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('TEMP', '--', Icons.thermostat, 'idle'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('PH', '--', Icons.science, 'idle'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('HUMID', '--', Icons.air, 'idle'),
+      ];
+    } else {
+      telemetryPills = [
+        _buildTelemetryPill('MOIST', '62%', Icons.water_drop, 'optimal'), 
+        const SizedBox(width: 10),
+        _buildTelemetryPill('LUX', '1.3k', Icons.light_mode, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('TEMP', '25°', Icons.thermostat, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('PH', '6.3', Icons.science, 'optimal'),
+        const SizedBox(width: 10),
+        _buildTelemetryPill('HUMID', '72%', Icons.air, 'optimal'),
+      ];
+    }
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -257,28 +361,19 @@ class _HomeTabState extends State<HomeTab> {
             clipBehavior: Clip.none,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _buildTelemetryPill('MOIST', '64%', Icons.water_drop, 'optimal'),
-                const SizedBox(width: 10),
-                _buildTelemetryPill('LUX', '1.2k', Icons.light_mode, 'warning'),
-                const SizedBox(width: 10),
-                _buildTelemetryPill('TEMP', '28°', Icons.thermostat, 'optimal'),
-                const SizedBox(width: 10),
-                _buildTelemetryPill('PH', '6.8', Icons.science, 'optimal'),
-                const SizedBox(width: 10),
-                _buildTelemetryPill('HUMID', '82%', Icons.air, 'optimal'),
-              ],
+              children: telemetryPills,
             ),
           ),
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
+            // Legend uses the exact same lighter colors 
             children: [
-              _buildLegendItem(Colors.greenAccent.shade400, 'Optimal'),
+              _buildLegendItem(const Color(0xFF48BB78), 'Optimal'),
               const SizedBox(width: 12),
-              _buildLegendItem(Colors.orange, 'Warning'),
+              _buildLegendItem(const Color(0xFFED8936), 'Warning'),
               const SizedBox(width: 12),
-              _buildLegendItem(Colors.redAccent, 'Danger'),
+              _buildLegendItem(const Color(0xFFF56565), 'Danger'),
             ],
           )
         ],
@@ -297,44 +392,46 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Widget _buildTelemetryPill(String label, String value, IconData icon, String status) {
-    Color statusColor;
+    Color bgColor;
+
+    // 椭圆背景颜色和图例完全一致（取中等柔和调）
     if (status == 'optimal') {
-      statusColor = Colors.greenAccent.shade700;
+      bgColor = const Color(0xFF48BB78); 
     } else if (status == 'warning') {
-      statusColor = Colors.orange;
+      bgColor = const Color(0xFFED8936); 
     } else if (status == 'danger') {
-      statusColor = Colors.redAccent;
+      bgColor = const Color(0xFFF56565); 
     } else {
-      statusColor = Colors.grey; 
+      bgColor = Colors.grey.shade400; 
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
       decoration: BoxDecoration(
-        color: statusColor.withOpacity(0.1), 
+        color: bgColor, 
         borderRadius: BorderRadius.circular(40),
+        boxShadow: [BoxShadow(color: bgColor.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 3))]
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white, 
+              color: Colors.white.withOpacity(0.95), // 接近纯白的内圈
               shape: BoxShape.circle,
-              boxShadow: [BoxShadow(color: statusColor.withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 2))]
             ),
-            child: Icon(icon, color: statusColor, size: 20),
+            child: Icon(icon, color: bgColor, size: 20), // 图标颜色和背景一致，非常协调
           ),
           const SizedBox(height: 12),
-          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)),
+          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)), // 白色标签
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF222222))),
+          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white)), // 白色数据
         ],
       ),
     );
   }
 
-  Widget _buildActiveAlertsWidget() {
+  Widget _buildActiveAlertsWidget(String zoneType) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -342,13 +439,74 @@ class _HomeTabState extends State<HomeTab> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             const Text('Active Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
-            Text('VIEW MORE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
+            InkWell(
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const DummyNotificationsScreen()));
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: Text('VIEW MORE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 16),
-        _buildNewAlertRow(Icons.warning_rounded, Colors.redAccent.shade700, 'Low Nitrogen detected', 'Zone B - Tomato Bed', '2m ago'),
-        const SizedBox(height: 12),
-        _buildNewAlertRow(Icons.schedule, Colors.orange.shade700, 'Filter change recommended', 'Hydroponic System A', '1h ago'),
+        
+        if (zoneType == 'A') ...[
+          _buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, '(Zone A) Humidity exceeds 85%', 'Seeding Tray Tray #4', '5m ago'),
+          const SizedBox(height: 12),
+          _buildNewAlertRow(Icons.lightbulb, Colors.amber.shade600, '(Zone A) Grow lights active', 'Supplemental trays 1-10', '1h ago'),
+        ] else if (zoneType == 'B') ...[
+          _buildNewAlertRow(Icons.check_circle, Colors.green.shade600, '(Zone B) Ready for harvest', 'Harvest window is open', '1h ago'),
+          const SizedBox(height: 12),
+          _buildNewAlertRow(Icons.warning_rounded, Colors.orange.shade700, '(Zone B) Low Moisture Detected', 'Pre-harvest drying in progress', '2h ago'),
+        ] else if (zoneType == 'C') ...[
+          _buildEmptyStateRow(Icons.notifications_paused, 'No active alerts for this zone.'),
+        ] else ...[
+          _buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, '(Zone A) Humidity exceeds 85%', 'Seeding Tray Tray #4', '5m ago'),
+          const SizedBox(height: 12),
+          _buildNewAlertRow(Icons.check_circle, Colors.green.shade600, '(Zone B) Ready for harvest', 'Harvest window is open', '1h ago'),
+        ]
+      ],
+    );
+  }
+
+  Widget _buildNextActionsWidget(String zoneType) {
+    return Column( 
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('Next Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
+            InkWell(
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const DummyControlsScreen()));
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(4.0),
+                child: Text('VIEW SCHEDULE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        
+        if (zoneType == 'A') ...[
+          _buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, '(Zone A) Gentle Ventilation', 'Seedling propagation chamber'),
+          const SizedBox(height: 12),
+          _buildNewActionRow(Icons.eco, Colors.green.shade100, Colors.green.shade800, '(Zone A) Mist Propagation', 'Rooting trays 1-10Misting Cycle'),
+        ] else if (zoneType == 'B') ...[
+          _buildNewActionRow(Icons.content_cut, Colors.orange.shade100, Colors.orange.shade800, '(Zone B) Initiate Harvest', 'Manual harvest required'),
+          const SizedBox(height: 12),
+          _buildNewActionRow(Icons.cleaning_services, Colors.blue.shade100, Colors.blue.shade700, '(Zone B) Flush Water Lines', 'Hydroponic System A cleaning'),
+        ] else if (zoneType == 'C') ...[
+           _buildEmptyStateRow(Icons.event_busy, 'No upcoming actions estimated.'),
+        ] else ...[
+          _buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, '(Zone A) Gentle Ventilation', 'Seedling propagation chamber'),
+          const SizedBox(height: 12),
+          _buildNewActionRow(Icons.content_cut, Colors.orange.shade100, Colors.orange.shade800, '(Zone B) Initiate Harvest', 'Manual harvest required'),
+        ]
       ],
     );
   }
@@ -381,25 +539,6 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildNextActionsWidget() {
-    return Column( 
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Next Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
-            Text('View Schedule', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Colors.green.shade800)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _buildNewActionRow(Icons.water_drop, Colors.blue.shade100, Colors.blue.shade700, 'Irrigation Phase 2', 'Scheduled at 2:00 PM Today'),
-        const SizedBox(height: 12),
-        _buildNewActionRow(Icons.eco, Colors.orange.shade100, Colors.orange.shade800, 'NPK Supplementing', 'Scheduled for tomorrow'),
-      ],
-    );
-  }
-
   Widget _buildNewActionRow(IconData icon, Color bgColor, Color iconColor, String title, String subtitle) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16), 
@@ -427,7 +566,38 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildAIPredictionWidget() {
+  Widget _buildEmptyStateRow(IconData icon, String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 24),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.6),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.shade200, style: BorderStyle.solid),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: Colors.grey.shade400, size: 32),
+          const SizedBox(height: 8),
+          Text(message, style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAIPredictionWidget(String zoneType) {
+    String aiMessage;
+    
+    if (zoneType == 'A') {
+      aiMessage = '(Zone A) Seedling roots established. True leaves expected in 5 days.';
+    } else if (zoneType == 'B') {
+      aiMessage = '(Zone B) Fruit ripening complete. Optimal Sugar Brix content detected.';
+    } else if (zoneType == 'C') {
+      aiMessage = '(Zone C) Zone is currently idle. System standing by for new crop assignment.';
+    } else {
+      aiMessage = '(All Zones) Overall resource distribution is balanced. Water usage optimized by 15%.';
+    }
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(color: const Color(0xFF022C22), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.green.shade900)),
@@ -442,9 +612,9 @@ class _HomeTabState extends State<HomeTab> {
             ],
           ),
           const SizedBox(height: 12),
-          const Text(
-            'Expected harvest in 12 days. Current growth rate is 4% faster than average.',
-            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
+          Text(
+            aiMessage,
+            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
           ),
           const SizedBox(height: 16),
           Row(
@@ -455,6 +625,48 @@ class _HomeTabState extends State<HomeTab> {
             ],
           )
         ],
+      ),
+    );
+  }
+}
+
+// -------------------------------------------------------------
+// Dummy Screens
+// -------------------------------------------------------------
+
+class DummyNotificationsScreen extends StatelessWidget {
+  const DummyNotificationsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Notifications', style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Color(0xFF064E3B)),
+        elevation: 1,
+      ),
+      body: const Center(
+        child: Text('Here is the Notifications Page', style: TextStyle(fontSize: 18)),
+      ),
+    );
+  }
+}
+
+class DummyControlsScreen extends StatelessWidget {
+  const DummyControlsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Manual Controls / Schedule', style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Color(0xFF064E3B)),
+        elevation: 1,
+      ),
+      body: const Center(
+        child: Text('Here is the Controls / Schedule Page', style: TextStyle(fontSize: 18)),
       ),
     );
   }
