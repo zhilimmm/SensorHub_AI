@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomeTab extends StatefulWidget {
-  final bool isLoggedIn; // Added variable to track login state
+  final bool isLoggedIn; 
 
-  // Default to true so it doesn't break if not passed
   const HomeTab({super.key, this.isLoggedIn = true}); 
 
   @override
@@ -21,6 +21,48 @@ class _HomeTabState extends State<HomeTab> {
     'All Zones'
   ];
 
+  // 1. Add a variable to store the fetched name
+  String _fetchedUserName = 'Loading...';
+
+  @override
+  void initState() {
+    super.initState();
+    // 2. Fetch the name when the dashboard loads
+    if (widget.isLoggedIn) {
+      _fetchUserProfile();
+    }
+  }
+
+  // 3. The function that grabs the name from your new Supabase table
+  Future<void> _fetchUserProfile() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('username')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (mounted) {
+        setState(() {
+          if (data != null && data['username'] != null && data['username'].toString().isNotEmpty) {
+            _fetchedUserName = data['username']; // Use the database name
+          } else {
+            // Fallback to email prefix if they haven't set a profile name yet
+            _fetchedUserName = user.email!.split('@')[0];
+          }
+        });
+      }
+    } catch (error) {
+      debugPrint('Error fetching name: $error');
+      if (mounted) {
+        setState(() => _fetchedUserName = 'User');
+      }
+    }
+  }
+
   @override
   void dispose() {
     _scrollController.dispose();
@@ -34,7 +76,6 @@ class _HomeTabState extends State<HomeTab> {
     if (_selectedZone.contains('Zone C')) currentZoneType = 'C';
     if (_selectedZone.contains('All Zones')) currentZoneType = 'ALL';
 
-    // ⭐ CORE LOGIC: If logged out, FORCE the system into Idle state ('C')
     if (!widget.isLoggedIn) {
       currentZoneType = 'C';
     }
@@ -103,20 +144,18 @@ class _HomeTabState extends State<HomeTab> {
               text: 'Hi, ', 
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF333333)), 
               children: [
-                // Change name to Guest if logged out
-                TextSpan(text: widget.isLoggedIn ? 'Zhi Lim' : 'Guest', style: const TextStyle(color: Colors.green)), 
+                // 4. Inject the dynamically fetched database name here
+                TextSpan(text: widget.isLoggedIn ? _fetchedUserName : 'Guest', style: const TextStyle(color: Colors.green)), 
                 const TextSpan(text: '!'), 
               ],
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            // Change subtitle if logged out
             widget.isLoggedIn ? 'Your ecosystem is flourishing today.' : 'System offline. Please log in to connect.',
             style: TextStyle(fontSize: 14, color: const Color(0xFF333333).withOpacity(0.7), fontWeight: FontWeight.w500),
           ),
           
-          // Only show the weather block if the user is logged in
           if (widget.isLoggedIn) ...[
             const SizedBox(height: 24),
             Container(
@@ -196,7 +235,6 @@ class _HomeTabState extends State<HomeTab> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           isExpanded: true, 
-          // If not logged in, force dropdown to show "Zone C: Idle" visually
           value: widget.isLoggedIn ? _selectedZone : 'Zone C: Idle',
           icon: Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 24), 
           elevation: 8, 
@@ -218,7 +256,7 @@ class _HomeTabState extends State<HomeTab> {
             if (newValue != null) {
               setState(() { _selectedZone = newValue; });
             }
-          } : null, // Disable dropdown if not logged in
+          } : null, 
         ),
       ),
     );
@@ -645,44 +683,24 @@ class _HomeTabState extends State<HomeTab> {
   }
 }
 
-// -------------------------------------------------------------
-// Dummy Screens
-// -------------------------------------------------------------
-
 class DummyNotificationsScreen extends StatelessWidget {
   const DummyNotificationsScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Notifications', style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Color(0xFF064E3B)),
-        elevation: 1,
-      ),
-      body: const Center(
-        child: Text('Here is the Notifications Page', style: TextStyle(fontSize: 18)),
-      ),
+      appBar: AppBar(title: const Text('Notifications')),
+      body: const Center(child: Text('Here is the Notifications Page')),
     );
   }
 }
 
 class DummyControlsScreen extends StatelessWidget {
   const DummyControlsScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manual Controls / Schedule', style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Color(0xFF064E3B)),
-        elevation: 1,
-      ),
-      body: const Center(
-        child: Text('Here is the Controls / Schedule Page', style: TextStyle(fontSize: 18)),
-      ),
+      appBar: AppBar(title: const Text('Manual Controls / Schedule')),
+      body: const Center(child: Text('Here is the Controls Page')),
     );
   }
 }

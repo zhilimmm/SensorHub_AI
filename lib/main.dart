@@ -55,8 +55,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       HomeTab(isLoggedIn: _isLoggedIn), 
       const Center(child: Text('AI Prediction Analysis', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)))), 
       const Center(child: Text('Manual Controls', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)))),       
-      const DataTab(),        
-      const SettingsTab(), 
+      DataTab(isLoggedIn: _isLoggedIn),        
+      SettingsTab(isLoggedIn: _isLoggedIn),
     ]; 
 
     return Scaffold(
@@ -64,29 +64,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
-        title: const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        // --- UPDATED TITLE SECTION ---
+        title: Row(
           children: [
-            Text('SensorHub AI', style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.w900, fontSize: 18)),
-            Row(
+            // Using the Eco Icon to match your login screen. 
+            // Note: If you want to use the specific custom image you uploaded, 
+            // replace this Icon with: Image.asset('assets/your_logo_file.png', height: 32)
+            Image.asset('assets/logo.png', width: 60, height: 40, fit: BoxFit.contain,),
+            const SizedBox(width: 10),  
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.circle, color: Colors.green, size: 8),
-                SizedBox(width: 4),
-                Text('SYSTEM LIVE', style: TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                const Text('SensorHub AI', style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.w900, fontSize: 18)),
+                Row(
+                  children: [
+                    // Dynamic live/offline dot
+                    Icon(Icons.circle, color: _isLoggedIn ? Colors.green : Colors.grey.shade400, size: 8),
+                    const SizedBox(width: 4),
+                    // Dynamic live/offline text
+                    Text(
+                      _isLoggedIn ? 'SYSTEM LIVE' : 'SYSTEM OFFLINE', 
+                      style: TextStyle(
+                        color: _isLoggedIn ? Colors.green : Colors.grey.shade500, 
+                        fontSize: 10, 
+                        fontWeight: FontWeight.bold, 
+                        letterSpacing: 1.2
+                      )
+                    ),
+                  ],
+                ),
               ],
             ),
           ],
         ),
+        // --- UPDATED ACTIONS SECTION ---
         actions: [
-          IconButton(
-            icon: const Icon(Icons.grid_view, color: Color(0xFF064E3B)),
-            onPressed: () {},
-          ),
+          // REMOVED the grid_view IconButton here!
           IconButton(
             icon: const Icon(Icons.notifications, color: Color(0xFF064E3B)),
             onPressed: () {},
           ),
-          // Updated User Avatar with PopupMenuButton
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: PopupMenuButton<String>(
@@ -94,19 +111,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               color: Colors.white,
               onSelected: (String value) {
-                // Handle the dropdown selections
                 if (value == 'logout') {
                   setState(() {
-                    _isLoggedIn = false; // Updates state to logged out
+                    _isLoggedIn = false; 
                   });
                 } else if (value == 'login' || value == 'signup') {
-                  // Navigate to Login Screen
                   Navigator.pushReplacement(
                     context, 
                     MaterialPageRoute(builder: (context) => const LoginScreen())
                   );
                 } else if (value == 'switch_account') {
-                  // Navigate to Login Screen to switch accounts
                   Navigator.pushReplacement(
                     context, 
                     MaterialPageRoute(builder: (context) => const LoginScreen())
@@ -114,7 +128,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
               },
               itemBuilder: (BuildContext context) {
-                // Dynamically build menu based on login state
                 if (_isLoggedIn) {
                   return [
                     const PopupMenuItem(
@@ -164,7 +177,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 }
               },
               child: CircleAvatar(
-                // Change color based on login state (green if logged in, grey if logged out)
                 backgroundColor: _isLoggedIn ? Colors.green : Colors.grey.shade400,
                 radius: 16,
                 child: const Icon(Icons.person, color: Colors.white, size: 20),

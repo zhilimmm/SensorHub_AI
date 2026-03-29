@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class DataTab extends StatefulWidget {
-  const DataTab({super.key});
+  final bool isLoggedIn; 
+  const DataTab({super.key, this.isLoggedIn = true});
 
   @override
   State<DataTab> createState() => _DataTabState();
@@ -35,7 +36,7 @@ class _DataTabState extends State<DataTab> {
   bool get _isAllSelected => _showLight && _showHumidity && _showPh && _showMoisture && _showTemp;
 
   void _toggleAll(bool? value) {
-    if (value == null) return;
+    if (value == null || !widget.isLoggedIn) return; // Block if offline
     setState(() {
       _showLight = value;
       _showHumidity = value;
@@ -45,8 +46,11 @@ class _DataTabState extends State<DataTab> {
     });
   }
 
-  // Updated message format based on your request
   Widget _buildDynamicDateMessage() {
+    if (!widget.isLoggedIn) {
+      return Text('System offline.', style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic));
+    }
+
     String message;
     if (_customDateRange != null) {
       String startDate = DateFormat('MMM dd, yyyy').format(_customDateRange!.start);
@@ -63,6 +67,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   List<String> get _activeParams {
+    if (!widget.isLoggedIn) return []; // Return empty if offline
     List<String> active = [];
     if (_showLight) active.add('Light');
     if (_showHumidity) active.add('Humidity');
@@ -82,7 +87,9 @@ class _DataTabState extends State<DataTab> {
     super.dispose();
   }
 
-Future<void> _pickDateRange() async {
+  Future<void> _pickDateRange() async {
+    if (!widget.isLoggedIn) return; // Block if offline
+
     DateTimeRange? pickedRange = await showDateRangePicker(
       context: context,
       firstDate: DateTime(2020), 
@@ -104,7 +111,6 @@ Future<void> _pickDateRange() async {
           ),
           child: Center(
             child: ConstrainedBox(
-              // Increased maxHeight from 500 to 620 to prevent bottom clipping
               constraints: const BoxConstraints(maxWidth: 400, maxHeight: 620),
               child: child!,
             ),
@@ -123,6 +129,7 @@ Future<void> _pickDateRange() async {
 
   @override
   Widget build(BuildContext context) {
+    // Removed the Lock Screen block to show the greyed-out UI instead
     return Scrollbar(
       controller: _mainScroll,
       thumbVisibility: true,
@@ -153,7 +160,7 @@ Future<void> _pickDateRange() async {
   }
 
   Widget _buildHeaderSection() {
-    return const SizedBox(
+    return SizedBox(
       width: double.infinity, 
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center, 
@@ -161,13 +168,13 @@ Future<void> _pickDateRange() async {
           Text(
             'ECO-SYSTEM INTELLIGENCE',
             textAlign: TextAlign.center, 
-            style: TextStyle(color: Color(0xFF047857), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
+            style: TextStyle(color: widget.isLoggedIn ? const Color(0xFF047857) : Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
           ),
-          SizedBox(height: 4),
+          const SizedBox(height: 4),
           Text(
             'Historical Analysis', 
             textAlign: TextAlign.center, 
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF022C22), height: 1.1),
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1),
           ),
         ],
       ),
@@ -186,7 +193,7 @@ Future<void> _pickDateRange() async {
                 _buildDateChip('Last 7 Days'),
                 const SizedBox(width: 8),
                 _buildDateChip('Last 30 Days'),
-                if (_customDateRange != null) ...[
+                if (_customDateRange != null && widget.isLoggedIn) ...[
                   const SizedBox(width: 8),
                   _buildDateChip(_selectedDateRange), 
                 ]
@@ -196,7 +203,7 @@ Future<void> _pickDateRange() async {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: () {
+          onPressed: widget.isLoggedIn ? () {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: const Row(
@@ -211,11 +218,11 @@ Future<void> _pickDateRange() async {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               )
             );
-          },
+          } : null, // Disable if offline
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF065F46), 
-            foregroundColor: Colors.white,
-            elevation: 4,
+            backgroundColor: widget.isLoggedIn ? const Color(0xFF065F46) : Colors.grey.shade300, 
+            foregroundColor: widget.isLoggedIn ? Colors.white : Colors.grey.shade500,
+            elevation: widget.isLoggedIn ? 4 : 0,
             shadowColor: const Color(0xFF064E3B).withOpacity(0.5),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -227,22 +234,22 @@ Future<void> _pickDateRange() async {
   }
 
   Widget _buildDateChip(String label) {
-    bool isSelected = _selectedDateRange == label;
+    bool isSelected = _selectedDateRange == label && widget.isLoggedIn;
     return GestureDetector(
-      onTap: () {
+      onTap: widget.isLoggedIn ? () {
         setState(() {
           _selectedDateRange = label;
           if (label == 'Last 7 Days' || label == 'Last 30 Days') {
             _customDateRange = null; 
           }
         });
-      },
+      } : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), 
         decoration: BoxDecoration(
-          color: isSelected ? Colors.green.shade50 : Colors.white.withOpacity(0.8),
+          color: isSelected ? Colors.green.shade50 : (widget.isLoggedIn ? Colors.white.withOpacity(0.8) : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: isSelected ? Colors.green.shade400 : Colors.green.shade100),
+          border: Border.all(color: isSelected ? Colors.green.shade400 : Colors.grey.shade300),
         ),
         child: Row(
           children: [
@@ -250,13 +257,13 @@ Future<void> _pickDateRange() async {
               Icon(Icons.check_circle, color: Colors.green.shade700, size: 14),
               const SizedBox(width: 6),
             ] else ...[
-              Icon(Icons.calendar_today, color: Colors.green.shade700, size: 14),
+              Icon(Icons.calendar_today, color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey, size: 14),
               const SizedBox(width: 6),
             ],
             Text(
               label, 
               style: TextStyle(
-                color: isSelected ? Colors.green.shade800 : const Color(0xFF064E3B), 
+                color: widget.isLoggedIn ? (isSelected ? Colors.green.shade800 : const Color(0xFF064E3B)) : Colors.grey, 
                 fontWeight: FontWeight.bold, 
                 fontSize: 12 
               ),
@@ -282,9 +289,9 @@ Future<void> _pickDateRange() async {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Parameters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF022C22))),
+              Text('Parameters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade600)),
               InkWell(
-                onTap: () => _toggleAll(!_isAllSelected),
+                onTap: widget.isLoggedIn ? () => _toggleAll(!_isAllSelected) : null,
                 borderRadius: BorderRadius.circular(4),
                 child: Row(
                   children: [
@@ -294,8 +301,8 @@ Future<void> _pickDateRange() async {
                       height: 20,
                       width: 20,
                       child: Checkbox(
-                        value: _isAllSelected,
-                        onChanged: _toggleAll,
+                        value: _isAllSelected && widget.isLoggedIn,
+                        onChanged: widget.isLoggedIn ? _toggleAll : null,
                         activeColor: Colors.green.shade600,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       ),
@@ -318,20 +325,20 @@ Future<void> _pickDateRange() async {
 
   Widget _buildCheckboxRow(String title, bool value, Function(bool?) onChanged) {
     return InkWell(
-      onTap: () => onChanged(!value),
+      onTap: widget.isLoggedIn ? () => onChanged(!value) : null,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12.0), 
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF064E3B), fontSize: 14)),
+            Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey, fontSize: 14)),
             SizedBox(
               height: 20,
               width: 20,
               child: Checkbox(
-                value: value,
-                onChanged: onChanged,
+                value: value && widget.isLoggedIn,
+                onChanged: widget.isLoggedIn ? onChanged : null,
                 activeColor: Colors.green.shade600,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
               ),
@@ -361,8 +368,8 @@ Future<void> _pickDateRange() async {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Sensor Overlays', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF022C22))),
-                  Text('Aggregated telemetry over time', style: TextStyle(fontSize: 12, color: Colors.green.shade800.withOpacity(0.7))),
+                  Text('Sensor Overlays', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade600)),
+                  Text('Aggregated telemetry over time', style: TextStyle(fontSize: 12, color: widget.isLoggedIn ? Colors.green.shade800.withOpacity(0.7) : Colors.grey.shade500)),
                 ],
               ),
             ],
@@ -395,24 +402,24 @@ Future<void> _pickDateRange() async {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.green.shade50,
+              color: widget.isLoggedIn ? Colors.green.shade50 : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.green.shade100.withOpacity(0.5)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.psychology, color: Colors.green.shade700, size: 24),
+                Icon(Icons.psychology, color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey.shade400, size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF064E3B), fontSize: 14)),
+                      Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade600, fontSize: 14)),
                       const SizedBox(height: 4),
                       Text(
                         _getDynamicAIInsight(),
-                        style: TextStyle(color: Colors.green.shade800.withOpacity(0.8), fontSize: 12, height: 1.4),
+                        style: TextStyle(color: widget.isLoggedIn ? Colors.green.shade800.withOpacity(0.8) : Colors.grey.shade500, fontSize: 12, height: 1.4),
                       ),
                     ],
                   ),
@@ -479,6 +486,10 @@ Future<void> _pickDateRange() async {
   }
 
   List<Widget> _getDynamicXAxis() {
+    if (!widget.isLoggedIn) {
+      return ['--', '--', '--', '--'].map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))).toList();
+    }
+
     List<String> labels;
     if (_selectedDateRange == 'Last 7 Days') {
       labels = ['Day 1', 'Day 3', 'Day 5', 'Day 7'];
@@ -491,6 +502,7 @@ Future<void> _pickDateRange() async {
   }
 
   String _getDynamicAIInsight() {
+    if (!widget.isLoggedIn) return "System offline. Please log in to view historical data and AI insights.";
     if (_activeParams.isEmpty) return "Select parameters above to generate AI analysis.";
     if (_activeParams.contains('Humidity') && _activeParams.contains('Temperature')) {
       return "High correlation detected between Temperature and Humidity over $_selectedDateRange. Recommend increasing ventilation during peak heat hours to prevent mold.";
@@ -503,19 +515,20 @@ Future<void> _pickDateRange() async {
 
   // Generates data based on the selected dates
   List<Map<String, dynamic>> _getFilteredLogs() {
+    if (!widget.isLoggedIn) {
+      return [{
+        'date': '--', 'time': '--', 'id': '--', 'param': '--', 'val': '--', 'status': 'Offline',
+        'cBg': Colors.grey.shade200, 'cTxt': Colors.grey.shade600, 'cDot': Colors.grey.shade500
+      }];
+    }
+
     DateTime now = DateTime.now();
     DateTime start;
     DateTime end;
 
     if (_customDateRange != null) {
       start = _customDateRange!.start;
-      // Force the end date to be the very last second of the selected day
-      end = DateTime(
-        _customDateRange!.end.year, 
-        _customDateRange!.end.month, 
-        _customDateRange!.end.day, 
-        23, 59, 59
-      );
+      end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
     } else if (_selectedDateRange == 'Last 7 Days') {
       start = now.subtract(const Duration(days: 7));
       end = now;
@@ -528,13 +541,10 @@ Future<void> _pickDateRange() async {
     if (paramsToGenerate.isEmpty) return [];
 
     List<Map<String, dynamic>> generatedLogs = [];
-    
-    // Calculate total minutes to distribute logs perfectly within the selected range
     int totalMinutes = end.difference(start).inMinutes;
-    if (totalMinutes <= 0) totalMinutes = 1440; // Fallback to 24 hours
+    if (totalMinutes <= 0) totalMinutes = 1440; 
 
     for (int i = 0; i < 6; i++) {
-      // Evenly space the data points across the exact selected timeframe
       int minutesToSubtract = (i * (totalMinutes / 5)).round();
       DateTime logDate = end.subtract(Duration(minutes: minutesToSubtract));
       
@@ -567,7 +577,6 @@ Future<void> _pickDateRange() async {
     return generatedLogs;
   }
 
-  // --- METRIC LOG TABLE SECTION (Dynamic & Double Scrollbar) ---
   Widget _buildMetricLogTable() {
     List<Map<String, dynamic>> filteredLogs = _getFilteredLogs();
 
@@ -585,28 +594,28 @@ Future<void> _pickDateRange() async {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Metric Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF022C22))),
+                Text('Metric Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade600)),
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.calendar_month, color: Colors.green.shade700),
+                      icon: Icon(Icons.calendar_month, color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey),
                       onPressed: _pickDateRange,
                       tooltip: 'Select Custom Date',
                     ),
                     InkWell(
-                      onTap: () => setState(() => _showAllLogSensors = !_showAllLogSensors),
+                      onTap: widget.isLoggedIn ? () => setState(() => _showAllLogSensors = !_showAllLogSensors) : null,
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: _showAllLogSensors ? Colors.green.shade700 : Colors.green.shade50, 
+                          color: (_showAllLogSensors && widget.isLoggedIn) ? Colors.green.shade700 : (widget.isLoggedIn ? Colors.green.shade50 : Colors.grey.shade200), 
                           borderRadius: BorderRadius.circular(20), 
                           border: Border.all(color: Colors.green.shade100)
                         ),
                         child: Text(
                           'All Sensors', 
                           style: TextStyle(
-                            color: _showAllLogSensors ? Colors.white : Colors.green.shade700, 
+                            color: (_showAllLogSensors && widget.isLoggedIn) ? Colors.white : Colors.grey.shade600, 
                             fontSize: 10, 
                             fontWeight: FontWeight.bold
                           )
@@ -631,14 +640,12 @@ Future<void> _pickDateRange() async {
           SizedBox(
             height: 300, 
             width: double.infinity,
-            // ⭐ FIX: Swapped the order. Horizontal Scroll is now on the OUTSIDE. ⭐
             child: Scrollbar(
               controller: _tableHorizontalScroll,
               thumbVisibility: true,
               child: SingleChildScrollView(
                 controller: _tableHorizontalScroll,
                 scrollDirection: Axis.horizontal,
-                // ⭐ FIX: Vertical Scroll is now on the INSIDE. ⭐
                 child: Scrollbar(
                   controller: _tableVerticalScroll,
                   thumbVisibility: true,
@@ -646,7 +653,7 @@ Future<void> _pickDateRange() async {
                     controller: _tableVerticalScroll,
                     scrollDirection: Axis.vertical,
                     child: DataTable(
-                      headingRowColor: MaterialStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
+                      headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
                       dataRowMinHeight: 60,
                       dataRowMaxHeight: 60,
                       dividerThickness: 1,
@@ -677,11 +684,11 @@ Future<void> _pickDateRange() async {
   DataRow _buildDataRow(String date, String time, String id, String param, String val, String status, Color chipBg, Color chipText, Color dotColor) {
     return DataRow(
       cells: [
-        DataCell(Text(date, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF064E3B), fontSize: 13))),
+        DataCell(Text(date, style: TextStyle(fontWeight: FontWeight.w700, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
         DataCell(Text(time, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))),
-        DataCell(Text(id, style: TextStyle(color: Colors.green.shade700, fontSize: 13))),
-        DataCell(Text(param, style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF064E3B), fontSize: 13))),
-        DataCell(Text(val, style: const TextStyle(color: Color(0xFF064E3B), fontSize: 13))),
+        DataCell(Text(id, style: TextStyle(color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey, fontSize: 13))),
+        DataCell(Text(param, style: TextStyle(fontWeight: FontWeight.w700, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
+        DataCell(Text(val, style: TextStyle(color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -709,11 +716,11 @@ class MockChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final gridPaint = Paint()
-      ..color = Colors.green.shade50
+      ..color = Colors.grey.shade200
       ..strokeWidth = 1
       ..style = PaintingStyle.stroke;
 
-    canvas.drawLine(Offset(0, 0), Offset(size.width, 0), gridPaint);
+    canvas.drawLine(const Offset(0, 0), Offset(size.width, 0), gridPaint);
     canvas.drawLine(Offset(0, size.height / 2), Offset(size.width, size.height / 2), gridPaint);
     canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), gridPaint);
 
