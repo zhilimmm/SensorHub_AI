@@ -10,6 +10,9 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
+  // ⭐ ADDED: Scroll controller for the main page
+  final ScrollController _pageScrollController = ScrollController();
+
   bool _alertsEnabled = true;
   bool _reportsEnabled = true;
   bool _updatesEnabled = false;
@@ -19,10 +22,10 @@ class _SettingsTabState extends State<SettingsTab> {
 
   final TextEditingController _usernameController = TextEditingController();
   
-  String _selectedCountry = 'Malaysia';
-  String _selectedState = 'Selangor';
-  String _selectedCity = 'Shah Alam';
-  String _selectedLanguage = 'English';
+  String? _selectedCountry;
+  String? _selectedState;
+  String? _selectedCity;
+  String? _selectedLanguage;
 
   final List<String> _countryOptions = ['Malaysia', 'Singapore', 'Indonesia', 'Thailand'];
   final List<String> _stateOptions = ['Selangor', 'Kuala Lumpur', 'Penang', 'Johor', 'Perak'];
@@ -47,6 +50,8 @@ class _SettingsTabState extends State<SettingsTab> {
 
   @override
   void dispose() {
+    // ⭐ ALWAYS DISPOSE CONTROLLERS
+    _pageScrollController.dispose();
     _usernameController.dispose();
     super.dispose();
   }
@@ -62,13 +67,17 @@ class _SettingsTabState extends State<SettingsTab> {
           .maybeSingle();
 
       if (data != null) {
-        _usernameController.text = (data['username'] ?? 'New User') as String;
-        _selectedCountry = (data['country'] ?? 'Malaysia') as String;
-        _selectedState = (data['state'] ?? 'Selangor') as String;
-        _selectedCity = (data['city'] ?? 'Shah Alam') as String;
-        _selectedLanguage = (data['language'] ?? 'English') as String;
+        _usernameController.text = data['username'] as String? ?? '';
+        _selectedCountry = data['country'] as String?;
+        _selectedState = data['state'] as String?;
+        _selectedCity = data['city'] as String?;
+        _selectedLanguage = data['language'] as String?;
       } else {
-        _usernameController.text = 'New User'; 
+        _usernameController.text = ''; 
+        _selectedCountry = null;
+        _selectedState = null;
+        _selectedCity = null;
+        _selectedLanguage = null;
       }
     } catch (error) {
       debugPrint('Error loading profile: $error');
@@ -117,27 +126,38 @@ class _SettingsTabState extends State<SettingsTab> {
       );
     }
 
-    return Container(
-      color: _bgColor,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildHeaderSection(),
-              const SizedBox(height: 24),
-              _buildProfileSection(),
-              const SizedBox(height: 32),
-              _buildAccountDetails(),
-              const SizedBox(height: 32),
-              _buildImpactStats(),
-              const SizedBox(height: 32),
-              _buildNotificationPreferences(),
-              const SizedBox(height: 40),
-              if (widget.isLoggedIn) _buildFooterWithOvalButtons(), 
-              const SizedBox(height: 40),
-            ],
+    return GestureDetector(
+      onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
+      child: Container(
+        color: _bgColor,
+        // ⭐ ADDED: Scrollbar wrapper for the main page
+        child: Scrollbar(
+          controller: _pageScrollController,
+          thumbVisibility: true,
+          thickness: 6,
+          radius: const Radius.circular(10),
+          child: SingleChildScrollView(
+            controller: _pageScrollController,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeaderSection(),
+                  const SizedBox(height: 24),
+                  _buildProfileSection(),
+                  const SizedBox(height: 32),
+                  _buildAccountDetails(),
+                  const SizedBox(height: 32),
+                  _buildImpactStats(),
+                  const SizedBox(height: 32),
+                  _buildNotificationPreferences(),
+                  const SizedBox(height: 40),
+                  if (widget.isLoggedIn) _buildFooterWithOvalButtons(), 
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -176,22 +196,16 @@ class _SettingsTabState extends State<SettingsTab> {
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                // --- UPDATE STARTS HERE ---
-                // We use conditional logic to switch between the active dynamic photo
-                // and the greyed-out icon requested in image_319bd8.png
                 child: widget.isLoggedIn 
                   ? const CircleAvatar(
                       radius: 50,
-                      // The active dynamic photo (as seen in image_3197bc.png)
                       backgroundImage: NetworkImage('https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=256&auto=format&fit=crop'), 
                     )
                   : CircleAvatar(
                       radius: 50,
-                      backgroundColor: Colors.grey.shade200, // Matching the light grey background
-                      // The generic person icon placeholder (matching image_319bd8.png)
+                      backgroundColor: Colors.grey.shade200, 
                       child: Icon(Icons.person, size: 70, color: Colors.grey.shade500),
                     ),
-                // --- UPDATE ENDS HERE ---
               ),
               Container(
                 padding: const EdgeInsets.all(6),
@@ -204,7 +218,9 @@ class _SettingsTabState extends State<SettingsTab> {
         const SizedBox(height: 16),
         Center(
           child: Text(
-            !widget.isLoggedIn ? 'Guest User' : (_usernameController.text.isEmpty ? 'Unknown User' : _usernameController.text),
+            !widget.isLoggedIn 
+              ? 'Guest User' 
+              : (_usernameController.text.trim().isEmpty ? 'New User' : _usernameController.text), 
             style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade600, fontSize: 22, fontWeight: FontWeight.w900),
           ),
         ),
@@ -296,15 +312,24 @@ class _SettingsTabState extends State<SettingsTab> {
                     style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       isDense: true,
+                      hintText: 'Enter $label', 
+                      hintStyle: TextStyle(color: Colors.green.shade200),
                       contentPadding: const EdgeInsets.only(bottom: 4),
                       enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
                       focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.green, width: 2)),
                     ),
                   )
                 : Text(
-                    !widget.isLoggedIn ? '--' : controller.text,
+                    !widget.isLoggedIn 
+                        ? '--' 
+                        : (controller.text.trim().isEmpty ? 'Not set' : controller.text),
                     textAlign: TextAlign.right,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      color: controller.text.trim().isEmpty ? Colors.grey.shade400 : Colors.grey.shade600, 
+                      fontSize: 13, 
+                      fontWeight: FontWeight.w500,
+                      fontStyle: controller.text.trim().isEmpty ? FontStyle.italic : FontStyle.normal,
+                    ),
                   ),
           ),
         ],
@@ -312,7 +337,7 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  Widget _buildAccountRowDropdown(IconData icon, String label, String currentValue, List<String> options, ValueChanged<String?> onChanged) {
+  Widget _buildAccountRowDropdown(IconData icon, String label, String? currentValue, List<String> options, ValueChanged<String?> onChanged) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
       child: Row(
@@ -327,6 +352,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     alignment: Alignment.centerRight,
                     child: DropdownButton<String>(
                       value: currentValue,
+                      hint: Text('Select $label', style: TextStyle(color: Colors.green.shade300, fontSize: 13)), 
                       isDense: true,
                       icon: Icon(Icons.arrow_drop_down, color: Colors.green.shade700),
                       style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w600),
@@ -338,9 +364,16 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   )
                 : Text(
-                    !widget.isLoggedIn ? '--' : currentValue,
+                    !widget.isLoggedIn 
+                        ? '--' 
+                        : (currentValue ?? 'Not set'),
                     textAlign: TextAlign.right,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      color: currentValue == null ? Colors.grey.shade400 : Colors.grey.shade600, 
+                      fontSize: 13, 
+                      fontWeight: FontWeight.w500,
+                      fontStyle: currentValue == null ? FontStyle.italic : FontStyle.normal,
+                    ),
                   ),
           ),
         ],

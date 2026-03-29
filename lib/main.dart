@@ -9,7 +9,7 @@ Future<void> main() async {
   // Ensure Flutter bindings are initialized before calling async code
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase with your unique keys
+  // Initialize Supabase with unique keys
   await Supabase.initialize(
     url: 'https://reszkykrwtcvnvpcmdzj.supabase.co', // Project URL
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlc3preWtyd3Rjdm52cGNtZHpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3ODQ0NjgsImV4cCI6MjA5MDM2MDQ2OH0.Gm4S2tqhU1A0oLC6-5qs9MFlj5WzUFP2eHt2pL90DI0',                   // anon public key
@@ -64,12 +64,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
-        // --- UPDATED TITLE SECTION ---
         title: Row(
           children: [
-            // Using the Eco Icon to match your login screen. 
-            // Note: If you want to use the specific custom image you uploaded, 
-            // replace this Icon with: Image.asset('assets/your_logo_file.png', height: 32)
             Image.asset('assets/logo.png', width: 60, height: 40, fit: BoxFit.contain,),
             const SizedBox(width: 10),  
             Column(

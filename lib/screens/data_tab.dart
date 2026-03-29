@@ -36,7 +36,7 @@ class _DataTabState extends State<DataTab> {
   bool get _isAllSelected => _showLight && _showHumidity && _showPh && _showMoisture && _showTemp;
 
   void _toggleAll(bool? value) {
-    if (value == null || !widget.isLoggedIn) return; // Block if offline
+    if (value == null || !widget.isLoggedIn) return; 
     setState(() {
       _showLight = value;
       _showHumidity = value;
@@ -67,7 +67,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   List<String> get _activeParams {
-    if (!widget.isLoggedIn) return []; // Return empty if offline
+    if (!widget.isLoggedIn) return []; 
     List<String> active = [];
     if (_showLight) active.add('Light');
     if (_showHumidity) active.add('Humidity');
@@ -88,7 +88,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   Future<void> _pickDateRange() async {
-    if (!widget.isLoggedIn) return; // Block if offline
+    if (!widget.isLoggedIn) return; 
 
     DateTimeRange? pickedRange = await showDateRangePicker(
       context: context,
@@ -129,7 +129,6 @@ class _DataTabState extends State<DataTab> {
 
   @override
   Widget build(BuildContext context) {
-    // Removed the Lock Screen block to show the greyed-out UI instead
     return Scrollbar(
       controller: _mainScroll,
       thumbVisibility: true,
@@ -218,7 +217,7 @@ class _DataTabState extends State<DataTab> {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               )
             );
-          } : null, // Disable if offline
+          } : null, 
           style: ElevatedButton.styleFrom(
             backgroundColor: widget.isLoggedIn ? const Color(0xFF065F46) : Colors.grey.shade300, 
             foregroundColor: widget.isLoggedIn ? Colors.white : Colors.grey.shade500,
@@ -513,7 +512,6 @@ class _DataTabState extends State<DataTab> {
     return "Trends for ${_activeParams.join(', ')} appear stable across the $_selectedDateRange period. No critical anomalies detected.";
   }
 
-  // Generates data based on the selected dates
   List<Map<String, dynamic>> _getFilteredLogs() {
     if (!widget.isLoggedIn) {
       return [{
@@ -640,18 +638,24 @@ class _DataTabState extends State<DataTab> {
           SizedBox(
             height: 300, 
             width: double.infinity,
+            // ⭐ SWAPPED: Vertical Scrollbar is now on the OUTSIDE so it sticks to the right edge of the card
             child: Scrollbar(
-              controller: _tableHorizontalScroll,
+              controller: _tableVerticalScroll,
               thumbVisibility: true,
+              thickness: 6,
+              radius: const Radius.circular(10),
               child: SingleChildScrollView(
-                controller: _tableHorizontalScroll,
-                scrollDirection: Axis.horizontal,
+                controller: _tableVerticalScroll,
+                scrollDirection: Axis.vertical,
+                // ⭐ Horizontal Scrollbar is now on the INSIDE
                 child: Scrollbar(
-                  controller: _tableVerticalScroll,
+                  controller: _tableHorizontalScroll,
                   thumbVisibility: true,
+                  thickness: 6,
+                  radius: const Radius.circular(10),
                   child: SingleChildScrollView(
-                    controller: _tableVerticalScroll,
-                    scrollDirection: Axis.vertical,
+                    controller: _tableHorizontalScroll,
+                    scrollDirection: Axis.horizontal,
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
                       dataRowMinHeight: 60,
