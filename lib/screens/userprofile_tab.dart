@@ -14,8 +14,9 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _updatesEnabled = false;
 
   // Design Colors
-  final Color _bgColor = const Color(0xFFEDF7F0); // Light greenish background
-  final Color _darkGreen = const Color(0xFF0A3B24); // Primary dark text/buttons
+  final Color _bgColor = const Color(0xFFEDF7F0); 
+  final Color _darkGreen = const Color(0xFF0A3B24); 
+  final Color _vibrantGreen = const Color(0xFF00E676); 
   final Color _cardColor = Colors.white;
 
   @override
@@ -28,17 +29,17 @@ class _SettingsTabState extends State<SettingsTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(),
+              _buildHeaderUppercaseLabel(),
               const SizedBox(height: 24),
-              _buildProfileSection(),
+              _buildProfileSectionWithoutButtons(),
               const SizedBox(height: 32),
-              _buildAccountDetails(),
+              _buildAccountDetailsWithEditIcons(),
               const SizedBox(height: 32),
               _buildImpactStats(),
               const SizedBox(height: 32),
               _buildNotificationPreferences(),
               const SizedBox(height: 40),
-              _buildFooter(),
+              _buildFooterWithOvalButtons(),
               const SizedBox(height: 40),
             ],
           ),
@@ -47,18 +48,20 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // --- HEADER SECTION ---
-  Widget _buildHeader() {
+  Widget _buildHeaderUppercaseLabel() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Row(
           children: [
-            Icon(Icons.arrow_back, color: _darkGreen, size: 20),
-            const SizedBox(width: 8),
             Text(
-              'Profile & Settings',
-              style: TextStyle(color: _darkGreen, fontSize: 16, fontWeight: FontWeight.bold),
+              'PROFILE & SETTINGS',
+              style: TextStyle(
+                color: _vibrantGreen, 
+                fontSize: 10, 
+                fontWeight: FontWeight.w900, 
+                letterSpacing: 2
+              ),
             ),
           ],
         ),
@@ -75,8 +78,7 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // --- PROFILE SECTION ---
-  Widget _buildProfileSection() {
+  Widget _buildProfileSectionWithoutButtons() {
     return Column(
       children: [
         Center(
@@ -91,7 +93,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 ),
                 child: const CircleAvatar(
                   radius: 50,
-                  backgroundImage: NetworkImage('https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=256&auto=format&fit=crop'), // Placeholder portrait
+                  backgroundImage: NetworkImage('https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=256&auto=format&fit=crop'), 
                 ),
               ),
               Container(
@@ -116,46 +118,11 @@ class _SettingsTabState extends State<SettingsTab> {
           'Smart Gardener since 2023',
           style: TextStyle(color: Colors.green.shade600, fontSize: 13, fontWeight: FontWeight.w600),
         ),
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _darkGreen,
-                  foregroundColor: Colors.white,
-                  elevation: 4,
-                  shadowColor: _darkGreen.withOpacity(0.3),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: const Text('Edit Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: _darkGreen,
-                  elevation: 0,
-                  side: const BorderSide(color: Colors.white),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                ),
-                child: const Text('Manage Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-              ),
-            ),
-          ],
-        )
       ],
     );
   }
 
-  // --- ACCOUNT DETAILS ---
-  Widget _buildAccountDetails() {
+  Widget _buildAccountDetailsWithEditIcons() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -170,11 +137,11 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
           child: Column(
             children: [
-              _buildAccountRow(Icons.alternate_email, 'Username', 'alex_h'),
+              _buildAccountRowWithEditIcon(Icons.alternate_email, 'Username', 'alex_h'),
               Divider(color: Colors.grey.shade200, height: 1),
-              _buildAccountRow(Icons.location_on, 'Location', 'Kapar, Selangor'),
+              _buildAccountRowWithEditIcon(Icons.location_on, 'Location', 'Kapar, Selangor'),
               Divider(color: Colors.grey.shade200, height: 1),
-              _buildAccountRow(Icons.language, 'Language', 'English'),
+              _buildAccountRowWithEditIcon(Icons.language, 'Language', 'English'),
             ],
           ),
         ),
@@ -182,7 +149,7 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  Widget _buildAccountRow(IconData icon, String label, String value) {
+  Widget _buildAccountRowWithEditIcon(IconData icon, String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
       child: Row(
@@ -191,13 +158,14 @@ class _SettingsTabState extends State<SettingsTab> {
           const SizedBox(width: 16),
           Text(label, style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold)),
           const Spacer(),
+          Icon(Icons.edit, color: Colors.grey.shade400, size: 14), 
+          const SizedBox(width: 8),
           Text(value, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500)),
         ],
       ),
     );
   }
 
-  // --- IMPACT STATS ---
   Widget _buildImpactStats() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,12 +194,11 @@ class _SettingsTabState extends State<SettingsTab> {
           ],
         ),
         const SizedBox(height: 12),
-        // AI Driven Wide Card
         Container(
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFF69FFA8), // Bright neon green from design
+            color: const Color(0xFF69FFA8), 
             borderRadius: BorderRadius.circular(24),
             boxShadow: [BoxShadow(color: const Color(0xFF69FFA8).withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
           ),
@@ -284,7 +251,6 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // --- NOTIFICATION PREFERENCES ---
   Widget _buildNotificationPreferences() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,32 +312,37 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // --- FOOTER SECTION ---
-  Widget _buildFooter() {
+  Widget _buildFooterWithOvalButtons() {
     return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.switch_account, color: _darkGreen, size: 18),
-            const SizedBox(width: 8),
-            Text('Switch Account', style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold)),
-          ],
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: OutlinedButton.icon(
+            onPressed: () {},
+            icon: Icon(Icons.switch_account, color: _darkGreen, size: 18),
+            label: Text('Switch Account', style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold)),
+            style: OutlinedButton.styleFrom(
+              backgroundColor: Colors.white, 
+              side: const BorderSide(color: Colors.white, width: 3), 
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), 
+            ),
+          ),
         ),
         const SizedBox(height: 24),
         SizedBox(
           width: double.infinity,
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: () {
-              // Add logout logic here
-            },
-            icon: const Icon(Icons.logout, color: Color(0xFFC0392B), size: 20),
-            label: const Text('Logout', style: TextStyle(color: Color(0xFFC0392B), fontSize: 14, fontWeight: FontWeight.bold)),
+            onPressed: () {},
+            icon: const Icon(Icons.logout, color: Colors.white, size: 20), 
+            label: const Text('Logout', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)), 
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFDEDEC), // Light red/orange background
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: const Color(0xFFC0392B), 
+              elevation: 4,
+              shadowColor: const Color(0xFFC0392B).withOpacity(0.4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), 
             ),
           ),
         ),
