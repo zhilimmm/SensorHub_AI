@@ -16,7 +16,7 @@ class SmartGreenhouseApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       title: 'SensorHub AI',
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color.fromARGB(255, 202, 236, 205),
+        scaffoldBackgroundColor: const Color(0xFFEDF7F0),
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         fontFamily: 'Manrope', 
       ),

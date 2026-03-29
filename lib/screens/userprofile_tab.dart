@@ -8,16 +8,65 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  // State for notification switches
   bool _alertsEnabled = true;
   bool _reportsEnabled = true;
   bool _updatesEnabled = false;
 
-  // Design Colors
+  bool _isEditingAccount = false;
+  
+  final TextEditingController _usernameController = TextEditingController(text: 'Alex Harrison');
+  
+  String _selectedCountry = 'Malaysia';
+  String _selectedState = 'Selangor';
+  String _selectedCity = 'Shah Alam';
+  String _selectedLanguage = 'English';
+
+  final List<String> _countryOptions = [
+    'Malaysia', 
+    'Singapore', 
+    'Indonesia',
+    'Thailand'
+  ];
+
+  final List<String> _stateOptions = [
+    'Selangor', 
+    'Kuala Lumpur', 
+    'Penang', 
+    'Johor',
+    'Perak'
+  ];
+
+  final List<String> _cityOptions = [
+    'Shah Alam', 
+    'Kapar', 
+    'Klang', 
+    'Subang Jaya',
+    'Petaling Jaya'
+  ];
+  
+  final List<String> _languageOptions = [
+    'English', 
+    'Bahasa Melayu', 
+    'Chinese'
+  ];
+
   final Color _bgColor = const Color(0xFFEDF7F0); 
   final Color _darkGreen = const Color(0xFF0A3B24); 
-  final Color _vibrantGreen = const Color(0xFF00E676); 
   final Color _cardColor = Colors.white;
+
+  @override
+  void initState() {
+    super.initState();
+    _usernameController.addListener(() {
+      setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -29,11 +78,11 @@ class _SettingsTabState extends State<SettingsTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeaderUppercaseLabel(),
+              _buildHeaderSection(),
               const SizedBox(height: 24),
-              _buildProfileSectionWithoutButtons(),
+              _buildProfileSection(),
               const SizedBox(height: 32),
-              _buildAccountDetailsWithEditIcons(),
+              _buildAccountDetails(),
               const SizedBox(height: 32),
               _buildImpactStats(),
               const SizedBox(height: 32),
@@ -48,37 +97,29 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  Widget _buildHeaderUppercaseLabel() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Text(
-              'PROFILE & SETTINGS',
-              style: TextStyle(
-                color: _vibrantGreen, 
-                fontSize: 10, 
-                fontWeight: FontWeight.w900, 
-                letterSpacing: 2
-              ),
-            ),
-          ],
-        ),
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.green.shade200),
+  Widget _buildHeaderSection() {
+    return const SizedBox(
+      width: double.infinity, 
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center, 
+        children: [
+          Text(
+            'ACCOUNT MANAGEMENT',
+            textAlign: TextAlign.center, 
+            style: TextStyle(color: Color(0xFF047857), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
           ),
-          child: Icon(Icons.check, color: Colors.green.shade600, size: 16),
-        )
-      ],
+          SizedBox(height: 4),
+          Text(
+            'User Profile & Settings', 
+            textAlign: TextAlign.center, 
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF022C22), height: 1.1),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildProfileSectionWithoutButtons() {
+  Widget _buildProfileSection() {
     return Column(
       children: [
         Center(
@@ -109,24 +150,44 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         ),
         const SizedBox(height: 16),
-        Text(
-          'Alex Harrison',
-          style: TextStyle(color: _darkGreen, fontSize: 22, fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Smart Gardener since 2023',
-          style: TextStyle(color: Colors.green.shade600, fontSize: 13, fontWeight: FontWeight.w600),
+        Center(
+          child: Text(
+            _usernameController.text.isEmpty ? 'Unknown User' : _usernameController.text,
+            style: TextStyle(color: _darkGreen, fontSize: 22, fontWeight: FontWeight.w900),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildAccountDetailsWithEditIcons() {
+  Widget _buildAccountDetails() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Account Details', style: TextStyle(color: _darkGreen, fontSize: 16, fontWeight: FontWeight.bold)),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Account Details', style: TextStyle(color: _darkGreen, fontSize: 16, fontWeight: FontWeight.bold)),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isEditingAccount = !_isEditingAccount;
+                });
+              },
+              child: _isEditingAccount
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.green.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green.shade200),
+                      ),
+                      child: Text('Done', style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
+                    )
+                  : Icon(Icons.edit, color: Colors.grey.shade600, size: 18),
+            )
+          ],
+        ),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -137,11 +198,31 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
           child: Column(
             children: [
-              _buildAccountRowWithEditIcon(Icons.alternate_email, 'Username', 'alex_h'),
+              _buildAccountRowText(Icons.alternate_email, 'Username', _usernameController),
               Divider(color: Colors.grey.shade200, height: 1),
-              _buildAccountRowWithEditIcon(Icons.location_on, 'Location', 'Kapar, Selangor'),
+              _buildAccountRowDropdown(Icons.public, 'Country', _selectedCountry, _countryOptions, (String? newValue) {
+                if (newValue != null) {
+                  setState(() => _selectedCountry = newValue);
+                }
+              }),
               Divider(color: Colors.grey.shade200, height: 1),
-              _buildAccountRowWithEditIcon(Icons.language, 'Language', 'English'),
+              _buildAccountRowDropdown(Icons.map, 'State', _selectedState, _stateOptions, (String? newValue) {
+                if (newValue != null) {
+                  setState(() => _selectedState = newValue);
+                }
+              }),
+              Divider(color: Colors.grey.shade200, height: 1),
+              _buildAccountRowDropdown(Icons.location_city, 'City', _selectedCity, _cityOptions, (String? newValue) {
+                if (newValue != null) {
+                  setState(() => _selectedCity = newValue);
+                }
+              }),
+              Divider(color: Colors.grey.shade200, height: 1),
+              _buildAccountRowDropdown(Icons.language, 'Language', _selectedLanguage, _languageOptions, (String? newValue) {
+                if (newValue != null) {
+                  setState(() => _selectedLanguage = newValue);
+                }
+              }),
             ],
           ),
         ),
@@ -149,7 +230,7 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  Widget _buildAccountRowWithEditIcon(IconData icon, String label, String value) {
+  Widget _buildAccountRowText(IconData icon, String label, TextEditingController controller) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 16.0),
       child: Row(
@@ -157,10 +238,68 @@ class _SettingsTabState extends State<SettingsTab> {
           Icon(icon, color: Colors.grey.shade600, size: 20),
           const SizedBox(width: 16),
           Text(label, style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold)),
-          const Spacer(),
-          Icon(Icons.edit, color: Colors.grey.shade400, size: 14), 
-          const SizedBox(width: 8),
-          Text(value, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: _isEditingAccount
+                ? TextField(
+                    controller: controller,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w600),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.only(bottom: 4),
+                      enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
+                      focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.green, width: 2)),
+                    ),
+                  )
+                : Text(
+                    controller.text,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAccountRowDropdown(IconData icon, String label, String currentValue, List<String> options, ValueChanged<String?> onChanged) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.grey.shade600, size: 20),
+          const SizedBox(width: 16),
+          Text(label, style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 16),
+          Expanded(
+            child: _isEditingAccount
+                ? Align(
+                    alignment: Alignment.centerRight,
+                    child: DropdownButton<String>(
+                      value: currentValue,
+                      isDense: true,
+                      icon: Icon(Icons.arrow_drop_down, color: Colors.green.shade700),
+                      style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w600),
+                      underline: Container(
+                        height: 1,
+                        color: Colors.grey.shade300,
+                      ),
+                      onChanged: onChanged,
+                      items: options.map<DropdownMenuItem<String>>((String option) {
+                        return DropdownMenuItem<String>(
+                          value: option,
+                          child: Text(option),
+                        );
+                      }).toList(),
+                    ),
+                  )
+                : Text(
+                    currentValue,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+          ),
         ],
       ),
     );
