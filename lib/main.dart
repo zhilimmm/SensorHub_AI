@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'screens/home_tab.dart'; 
 import 'screens/data_tab.dart';
 import 'screens/userprofile_tab.dart';
+// Import your login screen so the menu can navigate to it
+import 'screens/login_screen.dart'; 
 
 void main() {
   runApp(const SmartGreenhouseApp());
@@ -34,20 +36,22 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0; 
+  
+  // State variable to track login status
+  bool _isLoggedIn = true; 
 
   @override
   Widget build(BuildContext context) {
-    
-    // The list of screens your bottom navigation bar switches between
     final List<Widget> pages = [
-      const HomeTab(), 
+      HomeTab(isLoggedIn: _isLoggedIn), 
       const Center(child: Text('AI Prediction Analysis', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)))), 
       const Center(child: Text('Manual Controls', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)))),       
       const DataTab(),        
-      const SettingsTab(), // Updated to match the class name in userprofile_tab.dart
-    ]; // This closing bracket was missing in your code
+      const SettingsTab(), 
+    ]; 
 
     return Scaffold(
+      backgroundColor: const Color(0xFFEDF7F0),
       appBar: AppBar(
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
@@ -73,12 +77,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
             icon: const Icon(Icons.notifications, color: Color(0xFF064E3B)),
             onPressed: () {},
           ),
-          const Padding(
-            padding: EdgeInsets.only(right: 16.0),
-            child: CircleAvatar(
-              backgroundColor: Colors.green,
-              radius: 16,
-              child: Icon(Icons.person, color: Colors.white, size: 20),
+          // Updated User Avatar with PopupMenuButton
+          Padding(
+            padding: const EdgeInsets.only(right: 16.0),
+            child: PopupMenuButton<String>(
+              offset: const Offset(0, 45), 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              color: Colors.white,
+              onSelected: (String value) {
+                // Handle the dropdown selections
+                if (value == 'logout') {
+                  setState(() {
+                    _isLoggedIn = false; // Updates state to logged out
+                  });
+                } else if (value == 'login' || value == 'signup') {
+                  // Navigate to Login Screen
+                  Navigator.pushReplacement(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const LoginScreen())
+                  );
+                } else if (value == 'switch_account') {
+                  // Navigate to Login Screen to switch accounts
+                  Navigator.pushReplacement(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const LoginScreen())
+                  );
+                }
+              },
+              itemBuilder: (BuildContext context) {
+                // Dynamically build menu based on login state
+                if (_isLoggedIn) {
+                  return [
+                    const PopupMenuItem(
+                      value: 'switch_account',
+                      child: Row(
+                        children: [
+                          Icon(Icons.switch_account, color: Color(0xFF064E3B), size: 18),
+                          SizedBox(width: 12),
+                          Text('Switch Account', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF064E3B))),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout, color: Colors.red, size: 18),
+                          SizedBox(width: 12),
+                          Text('Logout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.red)),
+                        ],
+                      ),
+                    ),
+                  ];
+                } else {
+                  return [
+                    const PopupMenuItem(
+                      value: 'login',
+                      child: Row(
+                        children: [
+                          Icon(Icons.login, color: Color(0xFF064E3B), size: 18),
+                          SizedBox(width: 12),
+                          Text('Login', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF064E3B))),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'signup',
+                      child: Row(
+                        children: [
+                          Icon(Icons.person_add, color: Color(0xFF064E3B), size: 18),
+                          SizedBox(width: 12),
+                          Text('Sign Up', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF064E3B))),
+                        ],
+                      ),
+                    ),
+                  ];
+                }
+              },
+              child: CircleAvatar(
+                // Change color based on login state (green if logged in, grey if logged out)
+                backgroundColor: _isLoggedIn ? Colors.green : Colors.grey.shade400,
+                radius: 16,
+                child: const Icon(Icons.person, color: Colors.white, size: 20),
+              ),
             ),
           )
         ],

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 class HomeTab extends StatefulWidget {
-  const HomeTab({super.key});
+  final bool isLoggedIn; // Added variable to track login state
+
+  // Default to true so it doesn't break if not passed
+  const HomeTab({super.key, this.isLoggedIn = true}); 
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -31,40 +34,48 @@ class _HomeTabState extends State<HomeTab> {
     if (_selectedZone.contains('Zone C')) currentZoneType = 'C';
     if (_selectedZone.contains('All Zones')) currentZoneType = 'ALL';
 
-    return Scrollbar(
-      controller: _scrollController,
-      thumbVisibility: true, 
-      thickness: 6.0,
-      radius: const Radius.circular(10),
-      child: SingleChildScrollView(
-        controller: _scrollController, 
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildGreetingAndWeatherWidget(),
-              const SizedBox(height: 16),
-              _buildZoneDropdown(),
-              const SizedBox(height: 24),
-              
-              const Text('OVERALL HEALTH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), letterSpacing: 1.2)),
-              const SizedBox(height: 8),
-              _buildHealthWidget(currentZoneType),
-              const SizedBox(height: 24),
+    // ⭐ CORE LOGIC: If logged out, FORCE the system into Idle state ('C')
+    if (!widget.isLoggedIn) {
+      currentZoneType = 'C';
+    }
 
-              _buildLiveTelemetryWidget(currentZoneType),
-              const SizedBox(height: 32), 
+    return Container(
+      color: const Color(0xFFEDF7F0),
+      child: Scrollbar(
+        controller: _scrollController,
+        thumbVisibility: true, 
+        thickness: 6.0,
+        radius: const Radius.circular(10),
+        child: SingleChildScrollView(
+          controller: _scrollController, 
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildGreetingAndWeatherWidget(),
+                const SizedBox(height: 16),
+                _buildZoneDropdown(),
+                const SizedBox(height: 24),
+                
+                const Text('OVERALL HEALTH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), letterSpacing: 1.2)),
+                const SizedBox(height: 8),
+                _buildHealthWidget(currentZoneType),
+                const SizedBox(height: 24),
 
-              _buildActiveAlertsWidget(currentZoneType),
-              const SizedBox(height: 32),
+                _buildLiveTelemetryWidget(currentZoneType),
+                const SizedBox(height: 32), 
 
-              _buildNextActionsWidget(currentZoneType),
-              const SizedBox(height: 24),
+                _buildActiveAlertsWidget(currentZoneType),
+                const SizedBox(height: 32),
 
-              _buildAIPredictionWidget(currentZoneType),
-              const SizedBox(height: 40),
-            ],
+                _buildNextActionsWidget(currentZoneType),
+                const SizedBox(height: 24),
+
+                _buildAIPredictionWidget(currentZoneType),
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
@@ -87,72 +98,77 @@ class _HomeTabState extends State<HomeTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text.rich(
+          Text.rich(
             TextSpan(
               text: 'Hi, ', 
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF333333)), 
+              style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF333333)), 
               children: [
-                TextSpan(text: 'Zhi Lim', style: TextStyle(color: Colors.green)), 
-                TextSpan(text: '!'), 
+                // Change name to Guest if logged out
+                TextSpan(text: widget.isLoggedIn ? 'Zhi Lim' : 'Guest', style: const TextStyle(color: Colors.green)), 
+                const TextSpan(text: '!'), 
               ],
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            'Your ecosystem is flourishing today.',
+            // Change subtitle if logged out
+            widget.isLoggedIn ? 'Your ecosystem is flourishing today.' : 'System offline. Please log in to connect.',
             style: TextStyle(fontSize: 14, color: const Color(0xFF333333).withOpacity(0.7), fontWeight: FontWeight.w500),
           ),
-          const SizedBox(height: 24),
-
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFFAED9F1), 
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))]
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('FRIDAY, MARCH 27, 2026', style: TextStyle(color: Color(0xFF666666), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                        SizedBox(height: 4),
-                        Text('Kuala Lumpur', style: TextStyle(color: Color(0xFF222222), fontSize: 16, fontWeight: FontWeight.w800)),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        const Row(children: [Icon(Icons.wb_sunny, color: Colors.orange, size: 28), Icon(Icons.cloud, color: Colors.white, size: 28)],),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('32°C', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF222222), height: 1.1)),
-                            Text('Partly Cloudy', style: TextStyle(color: const Color(0xFF666666), fontSize: 10, fontWeight: FontWeight.w700)),
-                          ],
-                        )
-                      ],
-                    )
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Divider(color: Colors.white.withOpacity(0.4), thickness: 1.5), 
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _buildWeatherDetail(Icons.air, '12 km/h'),
-                    _buildWeatherDetail(Icons.water_drop_outlined, '68%'),
-                    _buildWeatherDetail(Icons.umbrella_outlined, '10% rain'),
-                  ],
-                )
-              ],
-            ),
-          )
+          
+          // Only show the weather block if the user is logged in
+          if (widget.isLoggedIn) ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFAED9F1), 
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))]
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('FRIDAY, MARCH 27, 2026', style: TextStyle(color: Color(0xFF666666), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                          SizedBox(height: 4),
+                          Text('Kuala Lumpur', style: TextStyle(color: Color(0xFF222222), fontSize: 16, fontWeight: FontWeight.w800)),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          const Row(children: [Icon(Icons.wb_sunny, color: Colors.orange, size: 28), Icon(Icons.cloud, color: Colors.white, size: 28)],),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('32°C', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF222222), height: 1.1)),
+                              Text('Partly Cloudy', style: TextStyle(color: const Color(0xFF666666), fontSize: 10, fontWeight: FontWeight.w700)),
+                            ],
+                          )
+                        ],
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Divider(color: Colors.white.withOpacity(0.4), thickness: 1.5), 
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildWeatherDetail(Icons.air, '12 km/h'),
+                      _buildWeatherDetail(Icons.water_drop_outlined, '68%'),
+                      _buildWeatherDetail(Icons.umbrella_outlined, '10% rain'),
+                    ],
+                  )
+                ],
+              ),
+            )
+          ]
         ],
       ),
     );
@@ -180,7 +196,8 @@ class _HomeTabState extends State<HomeTab> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           isExpanded: true, 
-          value: _selectedZone,
+          // If not logged in, force dropdown to show "Zone C: Idle" visually
+          value: widget.isLoggedIn ? _selectedZone : 'Zone C: Idle',
           icon: Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 24), 
           elevation: 8, 
           borderRadius: BorderRadius.circular(24), 
@@ -197,11 +214,11 @@ class _HomeTabState extends State<HomeTab> {
               ),
             );
           }).toList(),
-          onChanged: (String? newValue) {
+          onChanged: widget.isLoggedIn ? (String? newValue) {
             if (newValue != null) {
               setState(() { _selectedZone = newValue; });
             }
-          },
+          } : null, // Disable dropdown if not logged in
         ),
       ),
     );
@@ -367,7 +384,6 @@ class _HomeTabState extends State<HomeTab> {
           const SizedBox(height: 20),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            // Legend uses the exact same lighter colors 
             children: [
               _buildLegendItem(const Color(0xFF48BB78), 'Optimal'),
               const SizedBox(width: 12),
@@ -394,7 +410,6 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildTelemetryPill(String label, String value, IconData icon, String status) {
     Color bgColor;
 
-    // 椭圆背景颜色和图例完全一致（取中等柔和调）
     if (status == 'optimal') {
       bgColor = const Color(0xFF48BB78); 
     } else if (status == 'warning') {
@@ -417,15 +432,15 @@ class _HomeTabState extends State<HomeTab> {
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.95), // 接近纯白的内圈
+              color: Colors.white.withOpacity(0.95), 
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: bgColor, size: 20), // 图标颜色和背景一致，非常协调
+            child: Icon(icon, color: bgColor, size: 20), 
           ),
           const SizedBox(height: 12),
-          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)), // 白色标签
+          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)), 
           const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white)), // 白色数据
+          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white)), 
         ],
       ),
     );
