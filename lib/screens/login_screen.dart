@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // 1. Import Supabase
 import '../main.dart'; 
 
 class LoginScreen extends StatefulWidget {
@@ -12,30 +13,112 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLogin = true; 
   bool _obscurePassword = true; 
   bool _obscureConfirmPassword = true; 
+  bool _isLoading = false; // Tracks if we are currently talking to Supabase
+
+  // 2. Controllers to grab the text from the input fields
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _confirmPasswordController = TextEditingController();
 
   final Color _primaryColor = const Color(0xFF2E7D32);
   final Color _bgLight = const Color(0xFFE8F5E9);
   final Color _darkButton = const Color(0xFF064E3B);
   final Color _textDark = const Color(0xFF022C22);
 
-  // Added ScrollController to link the Scrollbar with the ScrollView
   final ScrollController _scrollController = ScrollController();
 
   @override
   void dispose() {
+    // Always dispose controllers to free up memory
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _scrollController.dispose();
     super.dispose();
+  }
+
+  // 3. The magic function that talks to Supabase
+  Future<void> _authenticate() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    // Basic validation
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true; // Start the loading spinner
+    });
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      if (_isLogin) {
+        // --- LOGIN LOGIC ---
+        await supabase.auth.signInWithPassword(
+          email: email,
+          password: password,
+        );
+      } else {
+        // --- SIGN UP LOGIC ---
+        final confirmPassword = _confirmPasswordController.text.trim();
+        if (password != confirmPassword) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Passwords do not match!'), backgroundColor: Colors.red),
+          );
+          setState(() => _isLoading = false);
+          return;
+        }
+        
+        await supabase.auth.signUp(
+          email: email,
+          password: password,
+        );
+      }
+
+      // If we get here, authentication was successful! Navigate to Dashboard.
+      if (mounted) {
+        Navigator.pushReplacement(
+          context, 
+          MaterialPageRoute(builder: (context) => const DashboardScreen()),
+        );
+      }
+    } on AuthException catch (error) {
+      // Catch Supabase-specific errors (like wrong password, email already exists)
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error.message), backgroundColor: Colors.red),
+        );
+      }
+    } catch (error) {
+      print('🚨 REAL ERROR: $error'); // 
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          // Show the actual error on the phone screen!
+          SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false; // Stop the loading spinner no matter what happens
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: _bgLight,
-      // SafeArea prevents the content from overlapping the phone's status bar (battery, time, etc.)
       body: SafeArea(
         child: Scrollbar(
           controller: _scrollController,
-          thumbVisibility: true, // Makes the scrollbar always visible when scrolling is needed
+          thumbVisibility: true, 
           thickness: 6,
           radius: const Radius.circular(10),
           child: Center(
@@ -61,7 +144,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // --- HEADER WITH BACK ARROW ---
                       Padding(
                         padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
                         child: Stack(
@@ -150,7 +232,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
-                      // --- INPUT FIELDS ---
                       Padding(
                         padding: const EdgeInsets.all(24.0),
                         child: Column(
@@ -159,6 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               label: 'Email Address',
                               hint: 'name@example.com',
                               icon: Icons.mail_outline,
+                              controller: _emailController, // Hooked up controller
                             ),
                             const SizedBox(height: 16),
                             _buildTextField(
@@ -166,9 +248,9 @@ class _LoginScreenState extends State<LoginScreen> {
                               hint: '••••••••',
                               icon: Icons.lock_outline,
                               isPassword: true,
+                              controller: _passwordController, // Hooked up controller
                             ),
                             
-                            // Show Confirm Password ONLY when Sign Up is selected
                             if (!_isLogin) ...[
                               const SizedBox(height: 16),
                               _buildTextField(
@@ -177,6 +259,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 icon: Icons.lock_outline,
                                 isPassword: true,
                                 isConfirmPassword: true,
+                                controller: _confirmPasswordController, // Hooked up controller
                               ),
                             ],
                             
@@ -186,12 +269,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: double.infinity,
                               height: 52,
                               child: ElevatedButton(
-                                onPressed: () {
-                                  Navigator.pushReplacement(
-                                    context, 
-                                    MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                                  );
-                                },
+                                // 4. Call our new auth function when pressed!
+                                onPressed: _isLoading ? null : _authenticate,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _darkButton,
                                   foregroundColor: Colors.white,
@@ -199,17 +278,22 @@ class _LoginScreenState extends State<LoginScreen> {
                                   elevation: 4,
                                   shadowColor: _darkButton.withOpacity(0.4),
                                 ),
-                                child: Text(
-                                  _isLogin ? 'Sign In' : 'Create Account',
-                                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                ),
+                                child: _isLoading 
+                                  ? const SizedBox(
+                                      height: 24, 
+                                      width: 24, 
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
+                                    )
+                                  : Text(
+                                      _isLogin ? 'Sign In' : 'Create Account',
+                                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    ),
                               ),
                             ),
                           ],
                         ),
                       ),
 
-                      // --- DIVIDER ---
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24.0),
                         child: Row(
@@ -228,7 +312,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 16),
 
-                      // --- SOCIAL BUTTONS (Only Google Now) ---
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 24.0),
                         child: SizedBox(
@@ -273,7 +356,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField({required String label, required String hint, required IconData icon, bool isPassword = false, bool isConfirmPassword = false}) {
+  // Added the controller parameter here so the text fields can actually save data
+  Widget _buildTextField({required String label, required String hint, required IconData icon, bool isPassword = false, bool isConfirmPassword = false, required TextEditingController controller}) {
     bool currentObscure = isConfirmPassword ? _obscureConfirmPassword : _obscurePassword;
 
     return Column(
@@ -289,6 +373,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 8),
         TextField(
+          controller: controller, // Hooked up the controller
           obscureText: isPassword && currentObscure,
           style: TextStyle(color: Colors.green.shade900, fontSize: 14),
           decoration: InputDecoration(
