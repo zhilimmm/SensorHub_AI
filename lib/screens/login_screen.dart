@@ -1,9 +1,9 @@
+import 'dart:async'; 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart'; 
 
 class LoginScreen extends StatefulWidget {
-  // ⭐ Added variable to control initial view
   final bool initialIsLogin; 
   
   const LoginScreen({super.key, this.initialIsLogin = true});
@@ -13,15 +13,24 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  // ⭐ Changed to 'late' so we can set it in initState
   late bool _isLogin; 
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true; 
   bool _isLoading = false; 
 
+  // Password Validation States
+  bool _hasUppercase = false;
+  bool _hasLowercase = false;
+  bool _hasNumber = false;
+  bool _hasSpecialChar = false;
+
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+
+  // ⭐ NEW: Added a FocusNode to track when the user clicks the password field
+  final FocusNode _passwordFocusNode = FocusNode();
+  bool _isPasswordFocused = false;
 
   final Color _primaryColor = const Color(0xFF2E7D32);
   final Color _bgLight = const Color(0xFFE8F5E9);
@@ -29,15 +38,53 @@ class _LoginScreenState extends State<LoginScreen> {
   final Color _textDark = const Color(0xFF022C22);
   final ScrollController _scrollController = ScrollController();
 
+  StreamSubscription<AuthState>? _authStateSubscription;
+
   @override
   void initState() {
     super.initState();
-    // ⭐ Set the initial state based on what button was clicked
     _isLogin = widget.initialIsLogin; 
+
+    // ⭐ NEW: Listen for focus changes (clicks) on the password box
+    _passwordFocusNode.addListener(() {
+      setState(() {
+        _isPasswordFocused = _passwordFocusNode.hasFocus;
+      });
+    });
+    
+    _authStateSubscription = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      final AuthChangeEvent event = data.event;
+      final Session? session = data.session;
+      
+      if (event == AuthChangeEvent.signedIn && session != null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Verification successful! Welcome.'), backgroundColor: Colors.green),
+          );
+          Navigator.pushAndRemoveUntil(
+            context, 
+            MaterialPageRoute(builder: (context) => const DashboardScreen()),
+            (Route<dynamic> route) => false
+          );
+        }
+      }
+    });
+  }
+
+  void _checkPasswordRequirements() {
+    final password = _passwordController.text;
+    setState(() {
+      _hasUppercase = password.contains(RegExp(r'[A-Z]'));
+      _hasLowercase = password.contains(RegExp(r'[a-z]'));
+      _hasNumber = password.contains(RegExp(r'[0-9]'));
+      _hasSpecialChar = password.contains(RegExp(r'[^a-zA-Z0-9]')); 
+    });
   }
 
   @override
   void dispose() {
+    _authStateSubscription?.cancel(); 
+    _passwordFocusNode.dispose(); // ⭐ Always dispose FocusNodes!
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -56,9 +103,16 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true; 
-    });
+    if (!_isLogin) {
+      if (!_hasUppercase || !_hasLowercase || !_hasNumber || !_hasSpecialChar) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please meet all password requirements.'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
+    setState(() => _isLoading = true); 
 
     try {
       final supabase = Supabase.instance.client;
@@ -68,6 +122,9 @@ class _LoginScreenState extends State<LoginScreen> {
           email: email,
           password: password,
         );
+        if (mounted) {
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
+        }
       } else {
         final confirmPassword = _confirmPasswordController.text.trim();
         if (password != confirmPassword) {
@@ -78,17 +135,18 @@ class _LoginScreenState extends State<LoginScreen> {
           return;
         }
         
-        await supabase.auth.signUp(
+        final AuthResponse res = await supabase.auth.signUp(
           email: email,
           password: password,
         );
-      }
 
-      if (mounted) {
-        Navigator.pushReplacement(
-          context, 
-          MaterialPageRoute(builder: (context) => const DashboardScreen()),
-        );
+        if (mounted) {
+          if (res.session == null) {
+            _showVerificationDialog(email, password);
+          } else {
+            Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
+          }
+        }
       }
     } on AuthException catch (error) {
       if (mounted) {
@@ -97,7 +155,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (error) {
-      debugPrint('🚨 REAL ERROR: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
@@ -105,11 +162,123 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() {
-          _isLoading = false; 
-        });
+        setState(() => _isLoading = false); 
       }
     }
+  }
+
+  void _showVerificationDialog(String email, String password) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, 
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+          elevation: 8,
+          child: Padding(
+            padding: const EdgeInsets.all(32.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min, 
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.mark_email_unread_outlined, 
+                    color: Color(0xFF064E3B), 
+                    size: 44
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'Check your inbox',
+                  style: TextStyle(
+                    color: Color(0xFF022C22),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'We sent a verification link to',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 14, fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  email,
+                  style: const TextStyle(color: Color(0xFF064E3B), fontSize: 15, fontWeight: FontWeight.w800),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'Please check your inbox and spam folder. Once clicked, return here.',
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.5),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF064E3B),
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    onPressed: () async {
+                      try {
+                        final res = await Supabase.instance.client.auth.signInWithPassword(email: email, password: password);
+                        if (res.session != null && mounted) {
+                          Navigator.pop(context); 
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Account verified successfully!'), backgroundColor: Colors.green),
+                          );
+                          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Not verified yet. Please check your email.'), backgroundColor: Colors.red),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text("I've verified my email", style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey.shade600,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context); 
+                      setState(() {
+                        _isLogin = true; 
+                        _passwordController.clear();
+                        _confirmPasswordController.clear();
+                      });
+                    },
+                    child: const Text('Cancel', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    );
   }
 
   @override
@@ -262,6 +431,18 @@ class _LoginScreenState extends State<LoginScreen> {
                               icon: Icons.lock_outline,
                               isPassword: true,
                               controller: _passwordController, 
+                              focusNode: _passwordFocusNode, // ⭐ Hooked up FocusNode
+                              onChanged: (val) => _checkPasswordRequirements(),
+                            ),
+                            
+                            // ⭐ NEW: Wrapped in AnimatedSize. It expands beautifully when focused!
+                            AnimatedSize(
+                              duration: const Duration(milliseconds: 250),
+                              curve: Curves.easeInOut,
+                              alignment: Alignment.topCenter,
+                              child: (!_isLogin && (_isPasswordFocused || _passwordController.text.isNotEmpty))
+                                ? _buildPasswordRequirements() 
+                                : const SizedBox.shrink(),
                             ),
                             
                             if (!_isLogin) ...[
@@ -345,6 +526,45 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildPasswordRequirements() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildRequirementRow('One uppercase letter', _hasUppercase),
+          _buildRequirementRow('One lowercase letter', _hasLowercase),
+          _buildRequirementRow('One number', _hasNumber),
+          _buildRequirementRow('One special character (e.g. @, #, \$, &, *)', _hasSpecialChar),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRequirementRow(String text, bool isMet) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        children: [
+          Icon(
+            isMet ? Icons.check_circle : Icons.cancel,
+            size: 14,
+            color: isMet ? Colors.green.shade700 : Colors.red.shade400,
+          ),
+          const SizedBox(width: 6),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isMet ? Colors.green.shade700 : Colors.red.shade400,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildToggleBtn(String text, bool isLoginBtn) {
     bool isSelected = _isLogin == isLoginBtn;
     return GestureDetector(
@@ -368,7 +588,8 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField({required String label, required String hint, required IconData icon, bool isPassword = false, bool isConfirmPassword = false, required TextEditingController controller}) {
+  // ⭐ NEW: Added the FocusNode parameter to the method signature
+  Widget _buildTextField({required String label, required String hint, required IconData icon, bool isPassword = false, bool isConfirmPassword = false, required TextEditingController controller, Function(String)? onChanged, FocusNode? focusNode}) {
     bool currentObscure = isConfirmPassword ? _obscureConfirmPassword : _obscurePassword;
 
     return Column(
@@ -385,7 +606,9 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: controller, 
+          focusNode: focusNode, // ⭐ Hooked up the FocusNode here!
           obscureText: isPassword && currentObscure,
+          onChanged: onChanged, 
           style: TextStyle(color: Colors.green.shade900, fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
