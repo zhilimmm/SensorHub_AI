@@ -163,9 +163,21 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
-                                Icon(Icons.eco, color: _primaryColor, size: 32),
-                                const SizedBox(width: 8),
+                                Transform.translate(
+                                  offset: const Offset(0, -4), // -4 moves it up. (Change to -6 or -8 if it needs to go higher)
+                                  child: Transform.scale(
+                                    scale: 1.5, 
+                                    child: Image.asset(
+                                      'assets/logo.png', 
+                                      width: 30,  
+                                      height: 25, 
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
                                 Text(
                                   'SensorHub AI',
                                   style: TextStyle(color: _textDark, fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
