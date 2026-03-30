@@ -9,10 +9,10 @@ Future<void> main() async {
   // Ensure Flutter bindings are initialized before calling async code
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase with unique keys
+  // Initialize Supabase with your unique keys
   await Supabase.initialize(
-    url: 'https://reszkykrwtcvnvpcmdzj.supabase.co', // Project URL
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlc3preWtyd3Rjdm52cGNtZHpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3ODQ0NjgsImV4cCI6MjA5MDM2MDQ2OH0.Gm4S2tqhU1A0oLC6-5qs9MFlj5WzUFP2eHt2pL90DI0',                   // anon public key
+    url: 'https://reszkykrwtcvnvpcmdzj.supabase.co', 
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlc3preWtyd3Rjdm52cGNtZHpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3ODQ0NjgsImV4cCI6MjA5MDM2MDQ2OH0.Gm4S2tqhU1A0oLC6-5qs9MFlj5WzUFP2eHt2pL90DI0',                   
   );
 
   runApp(const SmartGreenhouseApp());
@@ -62,16 +62,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFEDF7F0),
       appBar: AppBar(
+        toolbarHeight: 70, // Slightly taller to fit the logo nicely
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
         title: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Image.asset('assets/logo.png', width: 60, height: 40, fit: BoxFit.contain,),
-            const SizedBox(width: 10),  
+            Image.asset(
+              'assets/logo.png', 
+              width: 50, 
+              height: 40,
+              fit: BoxFit.contain,
+            ), 
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Text('SensorHub AI', style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.w900, fontSize: 18)),
+                const Text(
+                  'SensorHub AI', 
+                  style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.w900, fontSize: 18)
+                ),
                 Row(
                   children: [
                     // Dynamic live/offline dot
@@ -93,9 +103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
-        // --- UPDATED ACTIONS SECTION ---
         actions: [
-          // REMOVED the grid_view IconButton here!
           IconButton(
             icon: const Icon(Icons.notifications, color: Color(0xFF064E3B)),
             onPressed: () {},
@@ -191,9 +199,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
           type: BottomNavigationBarType.fixed, 
-          backgroundColor: Colors.white.withOpacity(0.9),
-          selectedItemColor: Colors.green.shade800,
-          unselectedItemColor: Colors.grey.shade400,
+          backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.9),
+          selectedItemColor: const Color.fromARGB(255, 73, 255, 82),
+          unselectedItemColor: const Color.fromARGB(255, 253, 253, 253),
           showUnselectedLabels: true,
           selectedFontSize: 10,
           unselectedFontSize: 10,

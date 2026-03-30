@@ -635,45 +635,50 @@ class _DataTabState extends State<DataTab> {
           ),
           const Divider(height: 1, color: Color(0xFFE8F5E9)), 
           
+          // ⭐ THIS IS THE MAGIC SCROLLBAR NESTING ⭐
           SizedBox(
             height: 300, 
             width: double.infinity,
-            // ⭐ SWAPPED: Vertical Scrollbar is now on the OUTSIDE so it sticks to the right edge of the card
             child: Scrollbar(
-              controller: _tableVerticalScroll,
+              controller: _tableVerticalScroll, // Vertical Scrollbar on the OUTSIDE
               thumbVisibility: true,
               thickness: 6,
               radius: const Radius.circular(10),
-              child: SingleChildScrollView(
-                controller: _tableVerticalScroll,
-                scrollDirection: Axis.vertical,
-                // ⭐ Horizontal Scrollbar is now on the INSIDE
-                child: Scrollbar(
-                  controller: _tableHorizontalScroll,
-                  thumbVisibility: true,
-                  thickness: 6,
-                  radius: const Radius.circular(10),
+              notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical, // Only listen to vertical
+              child: Scrollbar(
+                controller: _tableHorizontalScroll, // Horizontal Scrollbar INSIDE vertical
+                thumbVisibility: true,
+                thickness: 6,
+                radius: const Radius.circular(10),
+                notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal, // Only listen to horizontal
+                child: SingleChildScrollView(
+                  controller: _tableVerticalScroll,
+                  scrollDirection: Axis.vertical,
                   child: SingleChildScrollView(
                     controller: _tableHorizontalScroll,
                     scrollDirection: Axis.horizontal,
-                    child: DataTable(
-                      headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
-                      dataRowMinHeight: 60,
-                      dataRowMaxHeight: 60,
-                      dividerThickness: 1,
-                      columns: const [
-                        DataColumn(label: Text('DATE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                        DataColumn(label: Text('TIME', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                        DataColumn(label: Text('SENSOR ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                        DataColumn(label: Text('PARAMETER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                        DataColumn(label: Text('VALUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                        DataColumn(label: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                      ],
-                      rows: filteredLogs.isEmpty 
-                        ? [DataRow(cells: List.generate(6, (index) => DataCell(Text(index == 3 ? 'No Data' : ''))))]
-                        : filteredLogs.map((log) => _buildDataRow(
-                            log['date'], log['time'], log['id'], log['param'], log['val'], log['status'], log['cBg'], log['cTxt'], log['cDot']
-                          )).toList(),
+                    child: Padding(
+                      // Adds padding so the horizontal scrollbar doesn't cover the bottom row
+                      padding: const EdgeInsets.only(bottom: 16.0), 
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
+                        dataRowMinHeight: 60,
+                        dataRowMaxHeight: 60,
+                        dividerThickness: 1,
+                        columns: const [
+                          DataColumn(label: Text('DATE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
+                          DataColumn(label: Text('TIME', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
+                          DataColumn(label: Text('SENSOR ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
+                          DataColumn(label: Text('PARAMETER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
+                          DataColumn(label: Text('VALUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
+                          DataColumn(label: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
+                        ],
+                        rows: filteredLogs.isEmpty 
+                          ? [DataRow(cells: List.generate(6, (index) => DataCell(Text(index == 3 ? 'No Data' : ''))))]
+                          : filteredLogs.map((log) => _buildDataRow(
+                              log['date'], log['time'], log['id'], log['param'], log['val'], log['status'], log['cBg'], log['cTxt'], log['cDot']
+                            )).toList(),
+                      ),
                     ),
                   ),
                 ),
