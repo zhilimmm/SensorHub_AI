@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart'; 
+import 'login_screen.dart'; // ⭐ Added import
+import '../main.dart'; // ⭐ Added import for DashboardScreen routing
 
 class SettingsTab extends StatefulWidget {
   final bool isLoggedIn; 
@@ -10,18 +12,18 @@ class SettingsTab extends StatefulWidget {
 }
 
 class _SettingsTabState extends State<SettingsTab> {
-  // ⭐ ADDED: Scroll controller for the main page
   final ScrollController _pageScrollController = ScrollController();
-
+  
   bool _alertsEnabled = true;
   bool _reportsEnabled = true;
   bool _updatesEnabled = false;
 
   bool _isEditingAccount = false;
-  bool _isLoading = true; 
-
+  bool _isLoading = true;
   final TextEditingController _usernameController = TextEditingController();
   
+  bool get _hasProfileData => widget.isLoggedIn && _usernameController.text.trim().isNotEmpty;
+
   String? _selectedCountry;
   String? _selectedState;
   String? _selectedCity;
@@ -42,7 +44,7 @@ class _SettingsTabState extends State<SettingsTab> {
     _usernameController.addListener(() {
       if (_isEditingAccount) setState(() {});
     });
-    
+
     if (widget.isLoggedIn) {
       _getProfile(); 
     }
@@ -50,7 +52,6 @@ class _SettingsTabState extends State<SettingsTab> {
 
   @override
   void dispose() {
-    // ⭐ ALWAYS DISPOSE CONTROLLERS
     _pageScrollController.dispose();
     _usernameController.dispose();
     super.dispose();
@@ -58,8 +59,10 @@ class _SettingsTabState extends State<SettingsTab> {
 
   Future<void> _getProfile() async {
     setState(() => _isLoading = true);
+
     try {
       final userId = Supabase.instance.client.auth.currentUser!.id;
+
       final data = await Supabase.instance.client
           .from('profiles')
           .select()
@@ -88,6 +91,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
   Future<void> _updateProfile() async {
     setState(() => _isLoading = true);
+
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw Exception('No user logged in');
@@ -130,7 +134,6 @@ class _SettingsTabState extends State<SettingsTab> {
       onTap: () => FocusManager.instance.primaryFocus?.unfocus(),
       child: Container(
         color: _bgColor,
-        // ⭐ ADDED: Scrollbar wrapper for the main page
         child: Scrollbar(
           controller: _pageScrollController,
           thumbVisibility: true,
@@ -153,7 +156,11 @@ class _SettingsTabState extends State<SettingsTab> {
                   const SizedBox(height: 32),
                   _buildNotificationPreferences(),
                   const SizedBox(height: 40),
+                  
+                  // ⭐ Show Logged In Buttons or Offline Buttons
                   if (widget.isLoggedIn) _buildFooterWithOvalButtons(), 
+                  if (!widget.isLoggedIn) _buildGuestFooter(),
+                  
                   const SizedBox(height: 40),
                 ],
               ),
@@ -187,6 +194,12 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Widget _buildProfileSection() {
+    String defaultName = 'User';
+    final currentUser = Supabase.instance.client.auth.currentUser;
+    if (currentUser != null && currentUser.email != null) {
+      defaultName = currentUser.email!.split('@')[0];
+    }
+
     return Column(
       children: [
         Center(
@@ -196,7 +209,7 @@ class _SettingsTabState extends State<SettingsTab> {
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: widget.isLoggedIn 
+                child: _hasProfileData 
                   ? const CircleAvatar(
                       radius: 50,
                       backgroundImage: NetworkImage('https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=256&auto=format&fit=crop'), 
@@ -220,8 +233,13 @@ class _SettingsTabState extends State<SettingsTab> {
           child: Text(
             !widget.isLoggedIn 
               ? 'Guest User' 
-              : (_usernameController.text.trim().isEmpty ? 'New User' : _usernameController.text), 
-            style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade600, fontSize: 22, fontWeight: FontWeight.w900),
+              : (_hasProfileData ? _usernameController.text : defaultName), 
+            style: TextStyle(
+              color: _hasProfileData ? _darkGreen : Colors.grey.shade400, 
+              fontSize: 22, 
+              fontWeight: FontWeight.w900,
+              fontStyle: _hasProfileData ? FontStyle.normal : FontStyle.italic
+            ),
           ),
         ),
       ],
@@ -389,23 +407,23 @@ class _SettingsTabState extends State<SettingsTab> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('Impact Stats', style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade600, fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('Last 30 Days', style: TextStyle(color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.bold)),
+            Text('Last 30 Days', style: TextStyle(color: _hasProfileData ? Colors.green.shade700 : Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.bold)),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _buildStatCard(Icons.eco, 'CROP YIELD', widget.isLoggedIn ? '+18%' : '--')),
+            Expanded(child: _buildStatCard(Icons.eco, 'CROP YIELD', _hasProfileData ? '+18%' : '--')),
             const SizedBox(width: 12),
-            Expanded(child: _buildStatCard(Icons.water_drop, 'WATER SAVED', widget.isLoggedIn ? '4.2k L' : '--')),
+            Expanded(child: _buildStatCard(Icons.water_drop, 'WATER SAVED', _hasProfileData ? '4.2k L' : '--')),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _buildStatCard(Icons.bolt, 'ENERGY EFF.', widget.isLoggedIn ? '94%' : '--', iconColor: widget.isLoggedIn ? Colors.orange.shade700 : null)),
+            Expanded(child: _buildStatCard(Icons.bolt, 'ENERGY EFF.', _hasProfileData ? '94%' : '--', iconColor: _hasProfileData ? Colors.orange.shade700 : null)),
             const SizedBox(width: 12),
-            Expanded(child: _buildStatCard(Icons.co2, 'CO2 REDUCED', widget.isLoggedIn ? '120kg' : '--')),
+            Expanded(child: _buildStatCard(Icons.co2, 'CO2 REDUCED', _hasProfileData ? '120kg' : '--')),
           ],
         ),
         const SizedBox(height: 12),
@@ -413,7 +431,7 @@ class _SettingsTabState extends State<SettingsTab> {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: widget.isLoggedIn ? const Color(0xFF69FFA8) : Colors.grey.shade300, 
+            color: _hasProfileData ? const Color(0xFF69FFA8) : Colors.grey.shade200, 
             borderRadius: BorderRadius.circular(24),
           ),
           child: Column(
@@ -422,18 +440,18 @@ class _SettingsTabState extends State<SettingsTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(Icons.psychology, color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade500, size: 28),
+                  Icon(Icons.psychology, color: _hasProfileData ? _darkGreen : Colors.grey.shade400, size: 28),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.4), borderRadius: BorderRadius.circular(12)),
-                    child: Text(widget.isLoggedIn ? 'AI DRIVEN' : 'OFFLINE', style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade600, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.6), borderRadius: BorderRadius.circular(12)),
+                    child: Text(_hasProfileData ? 'AI DRIVEN' : 'NO DATA', style: TextStyle(color: _hasProfileData ? _darkGreen : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
                   )
                 ],
               ),
               const SizedBox(height: 20),
-              Text('NUTRIENT PRECISION', style: TextStyle(color: widget.isLoggedIn ? _darkGreen.withOpacity(0.7) : Colors.grey.shade600, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              Text('NUTRIENT PRECISION', style: TextStyle(color: _hasProfileData ? _darkGreen.withOpacity(0.7) : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
               const SizedBox(height: 4),
-              Text(widget.isLoggedIn ? '99.8%' : '--', style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade700, fontSize: 24, fontWeight: FontWeight.w900)),
+              Text(_hasProfileData ? '99.8%' : '--', style: TextStyle(color: _hasProfileData ? _darkGreen : Colors.grey.shade500, fontSize: 24, fontWeight: FontWeight.w900)),
             ],
           ),
         ),
@@ -452,11 +470,11 @@ class _SettingsTabState extends State<SettingsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: widget.isLoggedIn ? (iconColor ?? _darkGreen) : Colors.grey.shade400, size: 24),
+          Icon(icon, color: _hasProfileData ? (iconColor ?? _darkGreen) : Colors.grey.shade300, size: 24),
           const SizedBox(height: 20),
           Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
           const SizedBox(height: 4),
-          Text(value, style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade600, fontSize: 20, fontWeight: FontWeight.w900)),
+          Text(value, style: TextStyle(color: _hasProfileData ? _darkGreen : Colors.grey.shade400, fontSize: 20, fontWeight: FontWeight.w900)),
         ],
       ),
     );
@@ -523,6 +541,50 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
+  // ⭐ NEW: Colorful Offline / Guest Settings Footer
+  Widget _buildGuestFooter() {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true)));
+            },
+            icon: const Icon(Icons.login, color: Colors.white, size: 20),
+            label: const Text('Login', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF064E3B), 
+              elevation: 4,
+              shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: () {
+              Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: false)));
+            },
+            icon: const Icon(Icons.person_add, color: Colors.white, size: 20),
+            label: const Text('Create Account', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7D32), 
+              elevation: 4,
+              shadowColor: const Color(0xFF2E7D32).withOpacity(0.4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ⭐ UPDATED: Logged In Settings Footer (Sign Out & Route Logic)
   Widget _buildFooterWithOvalButtons() {
     return Column(
       children: [
@@ -530,7 +592,12 @@ class _SettingsTabState extends State<SettingsTab> {
           width: double.infinity,
           height: 52,
           child: OutlinedButton.icon(
-            onPressed: () {},
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (mounted) {
+                Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true)));
+              }
+            },
             icon: Icon(Icons.switch_account, color: _darkGreen, size: 18),
             label: Text('Switch Account', style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold)),
             style: OutlinedButton.styleFrom(
@@ -546,7 +613,16 @@ class _SettingsTabState extends State<SettingsTab> {
           width: double.infinity,
           height: 52,
           child: ElevatedButton.icon(
-            onPressed: () {},
+            onPressed: () async {
+              await Supabase.instance.client.auth.signOut();
+              if (mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context, 
+                  MaterialPageRoute(builder: (context) => const DashboardScreen()),
+                  (Route<dynamic> route) => false
+                );
+              }
+            },
             icon: const Icon(Icons.logout, color: Colors.white, size: 20), 
             label: const Text('Logout', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)), 
             style: ElevatedButton.styleFrom(

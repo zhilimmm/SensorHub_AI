@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:supabase_flutter/supabase_flutter.dart'; // ⭐ Added Supabase import
 
 class DataTab extends StatefulWidget {
   final bool isLoggedIn; 
@@ -22,8 +23,13 @@ class _DataTabState extends State<DataTab> {
 
   String _selectedDateRange = 'Last 30 Days';
   DateTimeRange? _customDateRange;
-
   bool _showAllLogSensors = false;
+  
+  // ⭐ NEW: Profile data tracking
+  bool _hasProfileData = false; 
+
+  // ⭐ NEW: Getter that returns true ONLY if logged in AND configured
+  bool get _isDataActive => widget.isLoggedIn && _hasProfileData;
 
   final Map<String, Color> _paramColors = {
     'Light': Colors.amber.shade600,
@@ -35,8 +41,47 @@ class _DataTabState extends State<DataTab> {
 
   bool get _isAllSelected => _showLight && _showHumidity && _showPh && _showMoisture && _showTemp;
 
+  @override
+  void initState() {
+    super.initState();
+    // ⭐ Fetch profile status on load
+    if (widget.isLoggedIn) {
+      _checkProfileStatus();
+    }
+  }
+
+  // ⭐ NEW: Checks Supabase to see if the user has a username saved
+  Future<void> _checkProfileStatus() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+      
+      final data = await Supabase.instance.client
+          .from('profiles')
+          .select('username')
+          .eq('id', user.id)
+          .maybeSingle();
+          
+      if (mounted) {
+        setState(() {
+          _hasProfileData = data != null && data['username'] != null && data['username'].toString().trim().isNotEmpty;
+        });
+      }
+    } catch (e) {
+      debugPrint("DataTab error: $e");
+    }
+  }
+
+  @override
+  void dispose() {
+    _mainScroll.dispose();
+    _tableVerticalScroll.dispose();
+    _tableHorizontalScroll.dispose();
+    super.dispose();
+  }
+
   void _toggleAll(bool? value) {
-    if (value == null || !widget.isLoggedIn) return; 
+    if (value == null || !_isDataActive) return; // ⭐ Use _isDataActive
     setState(() {
       _showLight = value;
       _showHumidity = value;
@@ -47,8 +92,11 @@ class _DataTabState extends State<DataTab> {
   }
 
   Widget _buildDynamicDateMessage() {
-    if (!widget.isLoggedIn) {
-      return Text('System offline.', style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic));
+    if (!_isDataActive) { // ⭐ Use _isDataActive
+      return Text(
+        widget.isLoggedIn ? 'Waiting for profile setup.' : 'System offline.', 
+        style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)
+      );
     }
 
     String message;
@@ -67,7 +115,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   List<String> get _activeParams {
-    if (!widget.isLoggedIn) return []; 
+    if (!_isDataActive) return []; // ⭐ Use _isDataActive
     List<String> active = [];
     if (_showLight) active.add('Light');
     if (_showHumidity) active.add('Humidity');
@@ -79,16 +127,8 @@ class _DataTabState extends State<DataTab> {
 
   List<Color> get _activeColors => _activeParams.map((p) => _paramColors[p]!).toList();
 
-  @override
-  void dispose() {
-    _mainScroll.dispose();
-    _tableVerticalScroll.dispose();
-    _tableHorizontalScroll.dispose();
-    super.dispose();
-  }
-
   Future<void> _pickDateRange() async {
-    if (!widget.isLoggedIn) return; 
+    if (!_isDataActive) return; // ⭐ Use _isDataActive
 
     DateTimeRange? pickedRange = await showDateRangePicker(
       context: context,
@@ -167,13 +207,13 @@ class _DataTabState extends State<DataTab> {
           Text(
             'ECO-SYSTEM INTELLIGENCE',
             textAlign: TextAlign.center, 
-            style: TextStyle(color: widget.isLoggedIn ? const Color(0xFF047857) : Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
+            style: TextStyle(color: _isDataActive ? const Color(0xFF047857) : Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
           ),
           const SizedBox(height: 4),
           Text(
             'Historical Analysis', 
             textAlign: TextAlign.center, 
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1),
+            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1),
           ),
         ],
       ),
@@ -192,7 +232,7 @@ class _DataTabState extends State<DataTab> {
                 _buildDateChip('Last 7 Days'),
                 const SizedBox(width: 8),
                 _buildDateChip('Last 30 Days'),
-                if (_customDateRange != null && widget.isLoggedIn) ...[
+                if (_customDateRange != null && _isDataActive) ...[
                   const SizedBox(width: 8),
                   _buildDateChip(_selectedDateRange), 
                 ]
@@ -202,7 +242,7 @@ class _DataTabState extends State<DataTab> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: widget.isLoggedIn ? () {
+          onPressed: _isDataActive ? () { // ⭐ Use _isDataActive
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: const Row(
@@ -219,9 +259,9 @@ class _DataTabState extends State<DataTab> {
             );
           } : null, 
           style: ElevatedButton.styleFrom(
-            backgroundColor: widget.isLoggedIn ? const Color(0xFF065F46) : Colors.grey.shade300, 
-            foregroundColor: widget.isLoggedIn ? Colors.white : Colors.grey.shade500,
-            elevation: widget.isLoggedIn ? 4 : 0,
+            backgroundColor: _isDataActive ? const Color(0xFF065F46) : Colors.grey.shade300, 
+            foregroundColor: _isDataActive ? Colors.white : Colors.grey.shade500,
+            elevation: _isDataActive ? 4 : 0,
             shadowColor: const Color(0xFF064E3B).withOpacity(0.5),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -233,9 +273,9 @@ class _DataTabState extends State<DataTab> {
   }
 
   Widget _buildDateChip(String label) {
-    bool isSelected = _selectedDateRange == label && widget.isLoggedIn;
+    bool isSelected = _selectedDateRange == label && _isDataActive;
     return GestureDetector(
-      onTap: widget.isLoggedIn ? () {
+      onTap: _isDataActive ? () {
         setState(() {
           _selectedDateRange = label;
           if (label == 'Last 7 Days' || label == 'Last 30 Days') {
@@ -246,7 +286,7 @@ class _DataTabState extends State<DataTab> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), 
         decoration: BoxDecoration(
-          color: isSelected ? Colors.green.shade50 : (widget.isLoggedIn ? Colors.white.withOpacity(0.8) : Colors.grey.shade100),
+          color: isSelected ? Colors.green.shade50 : (_isDataActive ? Colors.white.withOpacity(0.8) : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(color: isSelected ? Colors.green.shade400 : Colors.grey.shade300),
         ),
@@ -256,13 +296,13 @@ class _DataTabState extends State<DataTab> {
               Icon(Icons.check_circle, color: Colors.green.shade700, size: 14),
               const SizedBox(width: 6),
             ] else ...[
-              Icon(Icons.calendar_today, color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey, size: 14),
+              Icon(Icons.calendar_today, color: _isDataActive ? Colors.green.shade700 : Colors.grey, size: 14),
               const SizedBox(width: 6),
             ],
             Text(
               label, 
               style: TextStyle(
-                color: widget.isLoggedIn ? (isSelected ? Colors.green.shade800 : const Color(0xFF064E3B)) : Colors.grey, 
+                color: _isDataActive ? (isSelected ? Colors.green.shade800 : const Color(0xFF064E3B)) : Colors.grey, 
                 fontWeight: FontWeight.bold, 
                 fontSize: 12 
               ),
@@ -288,9 +328,9 @@ class _DataTabState extends State<DataTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Parameters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade600)),
+              Text('Parameters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade600)),
               InkWell(
-                onTap: widget.isLoggedIn ? () => _toggleAll(!_isAllSelected) : null,
+                onTap: _isDataActive ? () => _toggleAll(!_isAllSelected) : null,
                 borderRadius: BorderRadius.circular(4),
                 child: Row(
                   children: [
@@ -300,8 +340,8 @@ class _DataTabState extends State<DataTab> {
                       height: 20,
                       width: 20,
                       child: Checkbox(
-                        value: _isAllSelected && widget.isLoggedIn,
-                        onChanged: widget.isLoggedIn ? _toggleAll : null,
+                        value: _isAllSelected && _isDataActive,
+                        onChanged: _isDataActive ? _toggleAll : null,
                         activeColor: Colors.green.shade600,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                       ),
@@ -324,20 +364,20 @@ class _DataTabState extends State<DataTab> {
 
   Widget _buildCheckboxRow(String title, bool value, Function(bool?) onChanged) {
     return InkWell(
-      onTap: widget.isLoggedIn ? () => onChanged(!value) : null,
+      onTap: _isDataActive ? () => onChanged(!value) : null,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12.0), 
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey, fontSize: 14)),
+            Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey, fontSize: 14)),
             SizedBox(
               height: 20,
               width: 20,
               child: Checkbox(
-                value: value && widget.isLoggedIn,
-                onChanged: widget.isLoggedIn ? onChanged : null,
+                value: value && _isDataActive,
+                onChanged: _isDataActive ? onChanged : null,
                 activeColor: Colors.green.shade600,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
               ),
@@ -367,8 +407,8 @@ class _DataTabState extends State<DataTab> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Sensor Overlays', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade600)),
-                  Text('Aggregated telemetry over time', style: TextStyle(fontSize: 12, color: widget.isLoggedIn ? Colors.green.shade800.withOpacity(0.7) : Colors.grey.shade500)),
+                  Text('Sensor Overlays', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade600)),
+                  Text('Aggregated telemetry over time', style: TextStyle(fontSize: 12, color: _isDataActive ? Colors.green.shade800.withOpacity(0.7) : Colors.grey.shade500)),
                 ],
               ),
             ],
@@ -401,24 +441,24 @@ class _DataTabState extends State<DataTab> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: widget.isLoggedIn ? Colors.green.shade50 : Colors.grey.shade100,
+              color: _isDataActive ? Colors.green.shade50 : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.green.shade100.withOpacity(0.5)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.psychology, color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey.shade400, size: 24),
+                Icon(Icons.psychology, color: _isDataActive ? Colors.green.shade700 : Colors.grey.shade400, size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade600, fontSize: 14)),
+                      Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade600, fontSize: 14)),
                       const SizedBox(height: 4),
                       Text(
                         _getDynamicAIInsight(),
-                        style: TextStyle(color: widget.isLoggedIn ? Colors.green.shade800.withOpacity(0.8) : Colors.grey.shade500, fontSize: 12, height: 1.4),
+                        style: TextStyle(color: _isDataActive ? Colors.green.shade800.withOpacity(0.8) : Colors.grey.shade500, fontSize: 12, height: 1.4),
                       ),
                     ],
                   ),
@@ -437,7 +477,7 @@ class _DataTabState extends State<DataTab> {
     }
 
     List<Widget> legendItems = _activeParams.map((p) => _buildChartLegendItem(_paramColors[p]!, p.toUpperCase())).toList();
-
+    
     if (legendItems.length <= 3) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -485,7 +525,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   List<Widget> _getDynamicXAxis() {
-    if (!widget.isLoggedIn) {
+    if (!_isDataActive) {
       return ['--', '--', '--', '--'].map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))).toList();
     }
 
@@ -501,8 +541,13 @@ class _DataTabState extends State<DataTab> {
   }
 
   String _getDynamicAIInsight() {
-    if (!widget.isLoggedIn) return "System offline. Please log in to view historical data and AI insights.";
+    if (!_isDataActive) {
+      return widget.isLoggedIn 
+        ? "Please complete your profile setup in Settings to view AI insights." 
+        : "System offline. Please log in to view historical data and AI insights.";
+    }
     if (_activeParams.isEmpty) return "Select parameters above to generate AI analysis.";
+    
     if (_activeParams.contains('Humidity') && _activeParams.contains('Temperature')) {
       return "High correlation detected between Temperature and Humidity over $_selectedDateRange. Recommend increasing ventilation during peak heat hours to prevent mold.";
     }
@@ -513,9 +558,10 @@ class _DataTabState extends State<DataTab> {
   }
 
   List<Map<String, dynamic>> _getFilteredLogs() {
-    if (!widget.isLoggedIn) {
+    // ⭐ Show Grey/No Data if offline OR if it's a new unconfigured account
+    if (!_isDataActive) {
       return [{
-        'date': '--', 'time': '--', 'id': '--', 'param': '--', 'val': '--', 'status': 'Offline',
+        'date': '--', 'time': '--', 'id': '--', 'param': '--', 'val': '--', 'status': 'No Data',
         'cBg': Colors.grey.shade200, 'cTxt': Colors.grey.shade600, 'cDot': Colors.grey.shade500
       }];
     }
@@ -523,7 +569,7 @@ class _DataTabState extends State<DataTab> {
     DateTime now = DateTime.now();
     DateTime start;
     DateTime end;
-
+    
     if (_customDateRange != null) {
       start = _customDateRange!.start;
       end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
@@ -537,11 +583,11 @@ class _DataTabState extends State<DataTab> {
 
     List<String> paramsToGenerate = _showAllLogSensors ? _paramColors.keys.toList() : _activeParams;
     if (paramsToGenerate.isEmpty) return [];
-
+    
     List<Map<String, dynamic>> generatedLogs = [];
     int totalMinutes = end.difference(start).inMinutes;
-    if (totalMinutes <= 0) totalMinutes = 1440; 
-
+    if (totalMinutes <= 0) totalMinutes = 1440;
+    
     for (int i = 0; i < 6; i++) {
       int minutesToSubtract = (i * (totalMinutes / 5)).round();
       DateTime logDate = end.subtract(Duration(minutes: minutesToSubtract));
@@ -554,11 +600,19 @@ class _DataTabState extends State<DataTab> {
       Color cTxt = Colors.green.shade800;
       Color cDot = Colors.green.shade600;
 
-      if (param == 'Humidity') { val = '62.4%'; }
-      else if (param == 'Soil Moisture') { val = '18.2%'; status = 'Stable'; cBg = const Color(0xFF064E3B); cTxt = Colors.white; cDot = Colors.greenAccent.shade400; }
-      else if (param == 'Temperature') { val = '26.5°C'; }
-      else if (param == 'Light') { val = '1.2k Lux'; status = 'Warning'; cBg = Colors.orange.shade100; cTxt = Colors.orange.shade900; cDot = Colors.orange; }
-      else if (param == 'pH Value') { val = '6.8'; }
+      if (param == 'Humidity') { 
+        val = '62.4%';
+      } else if (param == 'Soil Moisture') { 
+        val = '18.2%'; status = 'Stable';
+        cBg = const Color(0xFF064E3B); cTxt = Colors.white; cDot = Colors.greenAccent.shade400;
+      } else if (param == 'Temperature') { 
+        val = '26.5°C';
+      } else if (param == 'Light') { 
+        val = '1.2k Lux'; status = 'Warning';
+        cBg = Colors.orange.shade100; cTxt = Colors.orange.shade900; cDot = Colors.orange; 
+      } else if (param == 'pH Value') { 
+        val = '6.8';
+      }
 
       generatedLogs.add({
         'date': DateFormat('MMM dd, yyyy').format(logDate),
@@ -577,7 +631,7 @@ class _DataTabState extends State<DataTab> {
 
   Widget _buildMetricLogTable() {
     List<Map<String, dynamic>> filteredLogs = _getFilteredLogs();
-
+    
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -592,28 +646,28 @@ class _DataTabState extends State<DataTab> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Metric Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade600)),
+                Text('Metric Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade600)),
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.calendar_month, color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey),
+                      icon: Icon(Icons.calendar_month, color: _isDataActive ? Colors.green.shade700 : Colors.grey),
                       onPressed: _pickDateRange,
                       tooltip: 'Select Custom Date',
                     ),
                     InkWell(
-                      onTap: widget.isLoggedIn ? () => setState(() => _showAllLogSensors = !_showAllLogSensors) : null,
+                      onTap: _isDataActive ? () => setState(() => _showAllLogSensors = !_showAllLogSensors) : null,
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: (_showAllLogSensors && widget.isLoggedIn) ? Colors.green.shade700 : (widget.isLoggedIn ? Colors.green.shade50 : Colors.grey.shade200), 
+                          color: (_showAllLogSensors && _isDataActive) ? Colors.green.shade700 : (_isDataActive ? Colors.green.shade50 : Colors.grey.shade200), 
                           borderRadius: BorderRadius.circular(20), 
                           border: Border.all(color: Colors.green.shade100)
                         ),
                         child: Text(
                           'All Sensors', 
                           style: TextStyle(
-                            color: (_showAllLogSensors && widget.isLoggedIn) ? Colors.white : Colors.grey.shade600, 
+                            color: (_showAllLogSensors && _isDataActive) ? Colors.white : Colors.grey.shade600, 
                             fontSize: 10, 
                             fontWeight: FontWeight.bold
                           )
@@ -635,22 +689,22 @@ class _DataTabState extends State<DataTab> {
           ),
           const Divider(height: 1, color: Color(0xFFE8F5E9)), 
           
-          // ⭐ THIS IS THE MAGIC SCROLLBAR NESTING ⭐
+          // ⭐ Magic Scrollbar Nesting
           SizedBox(
             height: 300, 
             width: double.infinity,
             child: Scrollbar(
-              controller: _tableVerticalScroll, // Vertical Scrollbar on the OUTSIDE
+              controller: _tableVerticalScroll, 
               thumbVisibility: true,
               thickness: 6,
               radius: const Radius.circular(10),
-              notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical, // Only listen to vertical
+              notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical, 
               child: Scrollbar(
-                controller: _tableHorizontalScroll, // Horizontal Scrollbar INSIDE vertical
+                controller: _tableHorizontalScroll, 
                 thumbVisibility: true,
                 thickness: 6,
                 radius: const Radius.circular(10),
-                notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal, // Only listen to horizontal
+                notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal, 
                 child: SingleChildScrollView(
                   controller: _tableVerticalScroll,
                   scrollDirection: Axis.vertical,
@@ -658,7 +712,6 @@ class _DataTabState extends State<DataTab> {
                     controller: _tableHorizontalScroll,
                     scrollDirection: Axis.horizontal,
                     child: Padding(
-                      // Adds padding so the horizontal scrollbar doesn't cover the bottom row
                       padding: const EdgeInsets.only(bottom: 16.0), 
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
@@ -693,11 +746,11 @@ class _DataTabState extends State<DataTab> {
   DataRow _buildDataRow(String date, String time, String id, String param, String val, String status, Color chipBg, Color chipText, Color dotColor) {
     return DataRow(
       cells: [
-        DataCell(Text(date, style: TextStyle(fontWeight: FontWeight.w700, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
+        DataCell(Text(date, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
         DataCell(Text(time, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))),
-        DataCell(Text(id, style: TextStyle(color: widget.isLoggedIn ? Colors.green.shade700 : Colors.grey, fontSize: 13))),
-        DataCell(Text(param, style: TextStyle(fontWeight: FontWeight.w700, color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
-        DataCell(Text(val, style: TextStyle(color: widget.isLoggedIn ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
+        DataCell(Text(id, style: TextStyle(color: _isDataActive ? Colors.green.shade700 : Colors.grey, fontSize: 13))),
+        DataCell(Text(param, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
+        DataCell(Text(val, style: TextStyle(color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

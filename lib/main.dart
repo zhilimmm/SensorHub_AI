@@ -44,10 +44,17 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _selectedIndex = 0; 
+  int _selectedIndex = 0;
   
-  // State variable to track login status
-  bool _isLoggedIn = true; 
+  // ⭐ Changed to late variable
+  late bool _isLoggedIn;
+
+  // ⭐ ADDED: Dynamically check Supabase on load
+  @override
+  void initState() {
+    super.initState();
+    _isLoggedIn = Supabase.instance.client.auth.currentUser != null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -57,12 +64,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       const Center(child: Text('Manual Controls', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)))),       
       DataTab(isLoggedIn: _isLoggedIn),        
       SettingsTab(isLoggedIn: _isLoggedIn),
-    ]; 
+    ];
 
     return Scaffold(
       backgroundColor: const Color(0xFFEDF7F0),
       appBar: AppBar(
-        toolbarHeight: 70, // Slightly taller to fit the logo nicely
+        toolbarHeight: 70, 
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
         title: Row(
@@ -84,10 +91,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 Row(
                   children: [
-                    // Dynamic live/offline dot
                     Icon(Icons.circle, color: _isLoggedIn ? Colors.green : Colors.grey.shade400, size: 8),
                     const SizedBox(width: 4),
-                    // Dynamic live/offline text
                     Text(
                       _isLoggedIn ? 'SYSTEM LIVE' : 'SYSTEM OFFLINE', 
                       style: TextStyle(
@@ -114,21 +119,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
               offset: const Offset(0, 45), 
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               color: Colors.white,
-              onSelected: (String value) {
+              // ⭐ UPDATED: Added async and Supabase sign out logic
+              onSelected: (String value) async {
                 if (value == 'logout') {
+                  await Supabase.instance.client.auth.signOut();
                   setState(() {
-                    _isLoggedIn = false; 
+                    _isLoggedIn = false;
                   });
-                } else if (value == 'login' || value == 'signup') {
+                } else if (value == 'login') {
                   Navigator.pushReplacement(
                     context, 
-                    MaterialPageRoute(builder: (context) => const LoginScreen())
+                    MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true))
+                  );
+                } else if (value == 'signup') {
+                  Navigator.pushReplacement(
+                    context, 
+                    MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: false))
                   );
                 } else if (value == 'switch_account') {
-                  Navigator.pushReplacement(
-                    context, 
-                    MaterialPageRoute(builder: (context) => const LoginScreen())
-                  );
+                  await Supabase.instance.client.auth.signOut();
+                  if (mounted) {
+                    Navigator.pushReplacement(
+                      context, 
+                      MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true))
+                    );
+                  }
                 }
               },
               itemBuilder: (BuildContext context) {
@@ -208,7 +223,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           elevation: 0,
           onTap: (int index) {
             setState(() {
-              _selectedIndex = index; 
+              _selectedIndex = index;
             });
           },
           items: const [

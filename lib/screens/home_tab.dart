@@ -12,7 +12,6 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> {
   final ScrollController _scrollController = ScrollController();
-
   String _selectedZone = 'Zone A: Seeding Chamber'; 
   final List<String> _zones = [
     'Zone A: Seeding Chamber',  
@@ -20,45 +19,63 @@ class _HomeTabState extends State<HomeTab> {
     'Zone C: Idle', 
     'All Zones'
   ];
-
-  // 1. Add a variable to store the fetched name
+  
   String _fetchedUserName = 'Loading...';
+  // ⭐ NEW: Add a variable to store the user's location
+  String _fetchedLocation = 'Loading...'; 
+  bool _hasProfileData = false; 
 
   @override
   void initState() {
     super.initState();
-    // 2. Fetch the name when the dashboard loads
     if (widget.isLoggedIn) {
       _fetchUserProfile();
     }
   }
 
-  // 3. The function that grabs the name from your new Supabase table
   Future<void> _fetchUserProfile() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
+      // ⭐ UPDATE: Select city, state, and country from Supabase
       final data = await Supabase.instance.client
           .from('profiles')
-          .select('username')
+          .select('username, city, state, country') 
           .eq('id', user.id)
           .maybeSingle();
 
       if (mounted) {
         setState(() {
-          if (data != null && data['username'] != null && data['username'].toString().isNotEmpty) {
-            _fetchedUserName = data['username']; // Use the database name
+          if (data != null && data['username'] != null && data['username'].toString().trim().isNotEmpty) {
+            _fetchedUserName = data['username']; 
+            _hasProfileData = true; 
+            
+            // ⭐ Determine the best location string to show
+            if (data['city'] != null) {
+              _fetchedLocation = data['city'];
+            } else if (data['state'] != null) {
+              _fetchedLocation = data['state'];
+            } else if (data['country'] != null) {
+              _fetchedLocation = data['country'];
+            } else {
+              _fetchedLocation = 'Location not set';
+            }
           } else {
-            // Fallback to email prefix if they haven't set a profile name yet
             _fetchedUserName = user.email!.split('@')[0];
+            _hasProfileData = false; 
+            _fetchedLocation = 'Location not set'; // Default for new users
           }
         });
       }
     } catch (error) {
-      debugPrint('Error fetching name: $error');
+      debugPrint('Error fetching name/location: $error');
       if (mounted) {
-        setState(() => _fetchedUserName = 'User');
+        setState(() {
+          _fetchedUserName = Supabase.instance.client.auth.currentUser?.email?.split('@')[0] ?? 'User';
+          _hasProfileData = false;
+          _fetchedLocation = 'Location not set';
+        });
       }
     }
   }
@@ -76,7 +93,8 @@ class _HomeTabState extends State<HomeTab> {
     if (_selectedZone.contains('Zone C')) currentZoneType = 'C';
     if (_selectedZone.contains('All Zones')) currentZoneType = 'ALL';
 
-    if (!widget.isLoggedIn) {
+    // ⭐ Force into Grey/Idle Zone C if they are logged out OR if they are a new account with no data
+    if (!widget.isLoggedIn || !_hasProfileData) {
       currentZoneType = 'C';
     }
 
@@ -98,22 +116,17 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(height: 16),
                 _buildZoneDropdown(),
                 const SizedBox(height: 24),
-                
                 const Text('OVERALL HEALTH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), letterSpacing: 1.2)),
                 const SizedBox(height: 8),
                 _buildHealthWidget(currentZoneType),
                 const SizedBox(height: 24),
-
                 _buildLiveTelemetryWidget(currentZoneType),
                 const SizedBox(height: 32), 
-
                 _buildActiveAlertsWidget(currentZoneType),
                 const SizedBox(height: 32),
-
                 _buildNextActionsWidget(currentZoneType),
                 const SizedBox(height: 24),
-
-                _buildAIPredictionWidget(currentZoneType),
+                _buildAIPredictionWidget(currentZoneType, widget.isLoggedIn && _hasProfileData),
                 const SizedBox(height: 40),
               ],
             ),
@@ -144,24 +157,25 @@ class _HomeTabState extends State<HomeTab> {
               text: 'Hi, ', 
               style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Color(0xFF333333)), 
               children: [
-                // 4. Inject the dynamically fetched database name here
-                TextSpan(text: widget.isLoggedIn ? _fetchedUserName : 'Guest', style: const TextStyle(color: Colors.green)), 
+                TextSpan(text: widget.isLoggedIn ? _fetchedUserName : 'Guest', style: TextStyle(color: _hasProfileData ? Colors.green : Colors.grey.shade500)), 
                 const TextSpan(text: '!'), 
               ],
             ),
           ),
           const SizedBox(height: 4),
           Text(
-            widget.isLoggedIn ? 'Your ecosystem is flourishing today.' : 'System offline. Please log in to connect.',
+            widget.isLoggedIn 
+              ? (_hasProfileData ? 'Your ecosystem is flourishing today.' : 'Please complete your profile in Settings to connect.') 
+              : 'System offline. Please log in to connect.',
             style: TextStyle(fontSize: 14, color: const Color(0xFF333333).withOpacity(0.7), fontWeight: FontWeight.w500),
           ),
           
-          if (widget.isLoggedIn) ...[
+if (widget.isLoggedIn) ...[
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFFAED9F1), 
+                color: _hasProfileData ? const Color(0xFFAED9F1) : Colors.grey.shade200, 
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))]
               ),
@@ -170,23 +184,36 @@ class _HomeTabState extends State<HomeTab> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Column(
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('FRIDAY, MARCH 27, 2026', style: TextStyle(color: Color(0xFF666666), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                          SizedBox(height: 4),
-                          Text('Kuala Lumpur', style: TextStyle(color: Color(0xFF222222), fontSize: 16, fontWeight: FontWeight.w800)),
+                          Text('FRIDAY, MARCH 27, 2026', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                          const SizedBox(height: 4),
+                          // ⭐ Inject the dynamic location here!
+                          Text(
+                            _hasProfileData ? _fetchedLocation : 'Location not set', 
+                            style: TextStyle(
+                              color: _hasProfileData ? const Color(0xFF222222) : Colors.grey.shade600, 
+                              fontSize: 16, 
+                              fontWeight: FontWeight.w800,
+                              fontStyle: _hasProfileData ? FontStyle.normal : FontStyle.italic,
+                            )
+                          ),
                         ],
                       ),
                       Row(
                         children: [
-                          const Row(children: [Icon(Icons.wb_sunny, color: Colors.orange, size: 28), Icon(Icons.cloud, color: Colors.white, size: 28)],),
+                          Row(children: [
+                            Icon(Icons.wb_sunny, color: _hasProfileData ? Colors.orange : Colors.grey.shade400, size: 28), 
+                            Icon(Icons.cloud, color: _hasProfileData ? Colors.white : Colors.grey.shade300, size: 28)
+                          ]),
                           const SizedBox(width: 8),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('32°C', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: Color(0xFF222222), height: 1.1)),
-                              Text('Partly Cloudy', style: TextStyle(color: const Color(0xFF666666), fontSize: 10, fontWeight: FontWeight.w700)),
+                              // ⭐ Hide temperature and condition if not configured
+                              Text(_hasProfileData ? '32°C' : '--°C', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: _hasProfileData ? const Color(0xFF222222) : Colors.grey.shade600, height: 1.1)),
+                              Text(_hasProfileData ? 'Partly Cloudy' : '--', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700)),
                             ],
                           )
                         ],
@@ -199,9 +226,10 @@ class _HomeTabState extends State<HomeTab> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildWeatherDetail(Icons.air, '12 km/h'),
-                      _buildWeatherDetail(Icons.water_drop_outlined, '68%'),
-                      _buildWeatherDetail(Icons.umbrella_outlined, '10% rain'),
+                      // ⭐ Hide bottom metrics if not configured
+                      _buildWeatherDetail(Icons.air, _hasProfileData ? '12 km/h' : '--'),
+                      _buildWeatherDetail(Icons.water_drop_outlined, _hasProfileData ? '68%' : '--'),
+                      _buildWeatherDetail(Icons.umbrella_outlined, _hasProfileData ? '10% rain' : '--'),
                     ],
                   )
                 ],
@@ -216,9 +244,9 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildWeatherDetail(IconData icon, String value) {
     return Row(
       children: [
-        Icon(icon, color: Colors.green.shade700, size: 16),
+        Icon(icon, color: _hasProfileData ? Colors.green.shade700 : Colors.grey.shade500, size: 16),
         const SizedBox(width: 6),
-        Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF333333))),
+        Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _hasProfileData ? const Color(0xFF333333) : Colors.grey.shade600)),
       ],
     );
   }
@@ -235,7 +263,8 @@ class _HomeTabState extends State<HomeTab> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
           isExpanded: true, 
-          value: widget.isLoggedIn ? _selectedZone : 'Zone C: Idle',
+          // ⭐ Lock to Zone C if no data
+          value: (widget.isLoggedIn && _hasProfileData) ? _selectedZone : 'Zone C: Idle',
           icon: Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 24), 
           elevation: 8, 
           borderRadius: BorderRadius.circular(24), 
@@ -245,14 +274,15 @@ class _HomeTabState extends State<HomeTab> {
               value: value,
               child: Row(
                 children: [
-                  const Icon(Icons.local_florist, color: Color(0xFF064E3B), size: 22),
+                  Icon(Icons.local_florist, color: (widget.isLoggedIn && _hasProfileData) ? const Color(0xFF064E3B) : Colors.grey.shade500, size: 22),
                   const SizedBox(width: 12),
-                  Text(value, style: const TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.bold, fontSize: 13)), 
+                  Text(value, style: TextStyle(color: (widget.isLoggedIn && _hasProfileData) ? const Color(0xFF064E3B) : Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 13)), 
                 ],
               ),
             );
           }).toList(),
-          onChanged: widget.isLoggedIn ? (String? newValue) {
+          // ⭐ Disable click if no data
+          onChanged: (widget.isLoggedIn && _hasProfileData) ? (String? newValue) {
             if (newValue != null) {
               setState(() { _selectedZone = newValue; });
             }
@@ -638,10 +668,13 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildAIPredictionWidget(String zoneType) {
+  Widget _buildAIPredictionWidget(String zoneType, bool isActive) {
     String aiMessage;
-    
-    if (zoneType == 'A') {
+
+    // ⭐ Handle the offline/unconfigured state first
+    if (!isActive) {
+      aiMessage = 'System offline. Please log in and configure your profile to view AI insights.';
+    } else if (zoneType == 'A') {
       aiMessage = '(Zone A) Seedling roots established. True leaves expected in 5 days.';
     } else if (zoneType == 'B') {
       aiMessage = '(Zone B) Fruit ripening complete. Optimal Sugar Brix content detected.';
@@ -653,28 +686,33 @@ class _HomeTabState extends State<HomeTab> {
 
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: const Color(0xFF022C22), borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.green.shade900)),
+      decoration: BoxDecoration(
+        // ⭐ Change background to grey if not active
+        color: isActive ? const Color(0xFF022C22) : Colors.grey.shade200, 
+        borderRadius: BorderRadius.circular(24), 
+        border: Border.all(color: isActive ? Colors.green.shade900 : Colors.grey.shade300)
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.auto_awesome, color: Colors.greenAccent, size: 16),
+              Icon(Icons.auto_awesome, color: isActive ? Colors.greenAccent : Colors.grey.shade400, size: 16),
               const SizedBox(width: 8),
-              Text('AI PREDICTION', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+              Text('AI PREDICTION', style: TextStyle(color: isActive ? Colors.greenAccent.shade400 : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
             ],
           ),
           const SizedBox(height: 12),
           Text(
             aiMessage,
-            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
+            style: TextStyle(color: isActive ? Colors.white : Colors.grey.shade500, fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
           ),
           const SizedBox(height: 16),
           Row(
             children: [
-              Text('VIEW FULL ANALYSIS', style: TextStyle(color: Colors.greenAccent.shade400, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              Text('VIEW FULL ANALYSIS', style: TextStyle(color: isActive ? Colors.greenAccent.shade400 : Colors.grey.shade400, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
               const SizedBox(width: 4),
-              Icon(Icons.arrow_forward, color: Colors.greenAccent.shade400, size: 16),
+              Icon(Icons.arrow_forward, color: isActive ? Colors.greenAccent.shade400 : Colors.grey.shade400, size: 16),
             ],
           )
         ],

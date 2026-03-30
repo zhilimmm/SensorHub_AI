@@ -1,21 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // 1. Import Supabase
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart'; 
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  // ⭐ Added variable to control initial view
+  final bool initialIsLogin; 
+  
+  const LoginScreen({super.key, this.initialIsLogin = true});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  bool _isLogin = true; 
-  bool _obscurePassword = true; 
+  // ⭐ Changed to 'late' so we can set it in initState
+  late bool _isLogin; 
+  bool _obscurePassword = true;
   bool _obscureConfirmPassword = true; 
-  bool _isLoading = false; // Tracks if we are currently talking to Supabase
+  bool _isLoading = false; 
 
-  // 2. Controllers to grab the text from the input fields
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
@@ -24,12 +27,17 @@ class _LoginScreenState extends State<LoginScreen> {
   final Color _bgLight = const Color(0xFFE8F5E9);
   final Color _darkButton = const Color(0xFF064E3B);
   final Color _textDark = const Color(0xFF022C22);
-
   final ScrollController _scrollController = ScrollController();
 
   @override
+  void initState() {
+    super.initState();
+    // ⭐ Set the initial state based on what button was clicked
+    _isLogin = widget.initialIsLogin; 
+  }
+
+  @override
   void dispose() {
-    // Always dispose controllers to free up memory
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -37,12 +45,10 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  // 3. The magic function that talks to Supabase
   Future<void> _authenticate() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
-    // Basic validation
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill in all fields'), backgroundColor: Colors.red),
@@ -51,20 +57,18 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     setState(() {
-      _isLoading = true; // Start the loading spinner
+      _isLoading = true; 
     });
 
     try {
       final supabase = Supabase.instance.client;
 
       if (_isLogin) {
-        // --- LOGIN LOGIC ---
         await supabase.auth.signInWithPassword(
           email: email,
           password: password,
         );
       } else {
-        // --- SIGN UP LOGIC ---
         final confirmPassword = _confirmPasswordController.text.trim();
         if (password != confirmPassword) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -80,7 +84,6 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
 
-      // If we get here, authentication was successful! Navigate to Dashboard.
       if (mounted) {
         Navigator.pushReplacement(
           context, 
@@ -88,24 +91,22 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } on AuthException catch (error) {
-      // Catch Supabase-specific errors (like wrong password, email already exists)
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error.message), backgroundColor: Colors.red),
         );
       }
     } catch (error) {
-      print('🚨 REAL ERROR: $error'); // 
+      debugPrint('🚨 REAL ERROR: $error');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          // Show the actual error on the phone screen!
           SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
         );
       }
     } finally {
       if (mounted) {
         setState(() {
-          _isLoading = false; // Stop the loading spinner no matter what happens
+          _isLoading = false; 
         });
       }
     }
@@ -166,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Transform.translate(
-                                  offset: const Offset(0, -4), // -4 moves it up. (Change to -6 or -8 if it needs to go higher)
+                                  offset: const Offset(0, -4), 
                                   child: Transform.scale(
                                     scale: 1.5, 
                                     child: Image.asset(
@@ -252,7 +253,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               label: 'Email Address',
                               hint: 'name@example.com',
                               icon: Icons.mail_outline,
-                              controller: _emailController, // Hooked up controller
+                              controller: _emailController, 
                             ),
                             const SizedBox(height: 16),
                             _buildTextField(
@@ -260,7 +261,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               hint: '••••••••',
                               icon: Icons.lock_outline,
                               isPassword: true,
-                              controller: _passwordController, // Hooked up controller
+                              controller: _passwordController, 
                             ),
                             
                             if (!_isLogin) ...[
@@ -271,7 +272,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 icon: Icons.lock_outline,
                                 isPassword: true,
                                 isConfirmPassword: true,
-                                controller: _confirmPasswordController, // Hooked up controller
+                                controller: _confirmPasswordController, 
                               ),
                             ],
                             
@@ -281,7 +282,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: double.infinity,
                               height: 52,
                               child: ElevatedButton(
-                                // 4. Call our new auth function when pressed!
                                 onPressed: _isLoading ? null : _authenticate,
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: _darkButton,
@@ -368,7 +368,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Added the controller parameter here so the text fields can actually save data
   Widget _buildTextField({required String label, required String hint, required IconData icon, bool isPassword = false, bool isConfirmPassword = false, required TextEditingController controller}) {
     bool currentObscure = isConfirmPassword ? _obscureConfirmPassword : _obscurePassword;
 
@@ -385,7 +384,7 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 8),
         TextField(
-          controller: controller, // Hooked up the controller
+          controller: controller, 
           obscureText: isPassword && currentObscure,
           style: TextStyle(color: Colors.green.shade900, fontSize: 14),
           decoration: InputDecoration(
