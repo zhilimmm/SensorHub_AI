@@ -4,6 +4,9 @@ import 'screens/home_tab.dart';
 import 'screens/data_tab.dart';
 import 'screens/userprofile_tab.dart';
 import 'screens/login_screen.dart'; 
+import 'screens/ai_tab.dart'; 
+import 'screens/control_tab.dart';
+import 'screens/notifications_screen.dart';
 
 Future<void> main() async {
   // Ensure Flutter bindings are initialized before calling async code
@@ -59,9 +62,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   Widget build(BuildContext context) {
     final List<Widget> pages = [
-      HomeTab(isLoggedIn: _isLoggedIn), 
-      const Center(child: Text('AI Prediction Analysis', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)))), 
-      const Center(child: Text('Manual Controls', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF064E3B)))),       
+      HomeTab(
+        isLoggedIn: _isLoggedIn,
+        onNavigateToAI: () {
+          setState(() {
+            _selectedIndex = 1; // Index 1 is the AI tab!
+          });
+        },
+      ),      AITab(isLoggedIn: _isLoggedIn), 
+      ControlsTab(isLoggedIn: _isLoggedIn),       
       DataTab(isLoggedIn: _isLoggedIn),        
       SettingsTab(isLoggedIn: _isLoggedIn),
     ];
@@ -111,7 +120,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.notifications, color: Color(0xFF064E3B)),
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+            },
           ),
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
@@ -120,12 +131,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               color: Colors.white,
               // ⭐ UPDATED: Added async and Supabase sign out logic
-              onSelected: (String value) async {
+onSelected: (String value) async {
                 if (value == 'logout') {
                   await Supabase.instance.client.auth.signOut();
-                  setState(() {
-                    _isLoggedIn = false;
-                  });
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Logged out successfully.'), backgroundColor: Colors.green),
+                    );
+                    setState(() {
+                      _isLoggedIn = false;
+                    });
+                  }
                 } else if (value == 'login') {
                   Navigator.pushReplacement(
                     context, 
@@ -139,6 +155,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 } else if (value == 'switch_account') {
                   await Supabase.instance.client.auth.signOut();
                   if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Logged out successfully.'), backgroundColor: Colors.green),
+                    );
                     Navigator.pushReplacement(
                       context, 
                       MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true))

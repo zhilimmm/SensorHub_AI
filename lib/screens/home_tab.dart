@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'notifications_screen.dart';
 
 class HomeTab extends StatefulWidget {
   final bool isLoggedIn; 
+  final VoidCallback? onNavigateToAI;
 
-  const HomeTab({super.key, this.isLoggedIn = true}); 
+  const HomeTab({super.key, this.isLoggedIn = true, this.onNavigateToAI});
 
   @override
   State<HomeTab> createState() => _HomeTabState();
@@ -524,8 +526,7 @@ if (widget.isLoggedIn) ...[
             const Text('Active Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
             InkWell(
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const DummyNotificationsScreen()));
-              },
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));              },
               child: Padding(
                 padding: const EdgeInsets.all(4.0),
                 child: Text('VIEW MORE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
@@ -564,7 +565,9 @@ if (widget.isLoggedIn) ...[
             const Text('Next Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
             InkWell(
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const DummyControlsScreen()));
+                if (widget.onNavigateToAI != null) {
+                  widget.onNavigateToAI!();
+                }              
               },
               child: Padding(
                 padding: const EdgeInsets.all(4.0),

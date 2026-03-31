@@ -17,8 +17,10 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true; 
   bool _isLoading = false; 
+  
+  // ⭐ NEW: This prevents the double message
+  bool _isManualAuthInProgress = false; 
 
-  // Password Validation States
   bool _hasUppercase = false;
   bool _hasLowercase = false;
   bool _hasNumber = false;
@@ -28,7 +30,6 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
-  // ⭐ NEW: Added a FocusNode to track when the user clicks the password field
   final FocusNode _passwordFocusNode = FocusNode();
   bool _isPasswordFocused = false;
 
@@ -45,7 +46,6 @@ class _LoginScreenState extends State<LoginScreen> {
     super.initState();
     _isLogin = widget.initialIsLogin; 
 
-    // ⭐ NEW: Listen for focus changes (clicks) on the password box
     _passwordFocusNode.addListener(() {
       setState(() {
         _isPasswordFocused = _passwordFocusNode.hasFocus;
@@ -57,9 +57,11 @@ class _LoginScreenState extends State<LoginScreen> {
       final Session? session = data.session;
       
       if (event == AuthChangeEvent.signedIn && session != null) {
-        if (mounted) {
+        // ⭐ FIX: Only show "Email Verified" if we ARE NOT currently 
+        // clicking the manual Login button.
+        if (mounted && !_isManualAuthInProgress) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Verification successful! Welcome.'), backgroundColor: Colors.green),
+            const SnackBar(content: Text('Email verified! Welcome.'), backgroundColor: Colors.green),
           );
           Navigator.pushAndRemoveUntil(
             context, 
@@ -84,7 +86,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _authStateSubscription?.cancel(); 
-    _passwordFocusNode.dispose(); // ⭐ Always dispose FocusNodes!
+    _passwordFocusNode.dispose(); 
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -112,7 +114,10 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
 
-    setState(() => _isLoading = true); 
+    setState(() {
+      _isLoading = true;
+      _isManualAuthInProgress = true; // ⭐ Block the background listener
+    }); 
 
     try {
       final supabase = Supabase.instance.client;
@@ -123,6 +128,9 @@ class _LoginScreenState extends State<LoginScreen> {
           password: password,
         );
         if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login successfully! Welcome back.'), backgroundColor: Colors.green),
+          );
           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
         }
       } else {
@@ -131,7 +139,10 @@ class _LoginScreenState extends State<LoginScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Passwords do not match!'), backgroundColor: Colors.red),
           );
-          setState(() => _isLoading = false);
+          setState(() {
+            _isLoading = false;
+            _isManualAuthInProgress = false;
+          });
           return;
         }
         
@@ -142,19 +153,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
         if (mounted) {
           if (res.session == null) {
+            setState(() {
+              _isManualAuthInProgress = false;
+            });
+            
             _showVerificationDialog(email, password);
           } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Account created successfully!'), backgroundColor: Colors.green),
+            );
             Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
           }
         }
       }
     } on AuthException catch (error) {
+      setState(() => _isManualAuthInProgress = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error.message), backgroundColor: Colors.red),
         );
       }
     } catch (error) {
+      setState(() => _isManualAuthInProgress = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error.toString()), backgroundColor: Colors.red),
@@ -238,7 +258,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (res.session != null && mounted) {
                           Navigator.pop(context); 
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Account verified successfully!'), backgroundColor: Colors.green),
+                            const SnackBar(content: Text('Verification successfully! Welcome.'), backgroundColor: Colors.green),
                           );
                           Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const DashboardScreen()));
                         }
@@ -431,11 +451,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               icon: Icons.lock_outline,
                               isPassword: true,
                               controller: _passwordController, 
-                              focusNode: _passwordFocusNode, // ⭐ Hooked up FocusNode
+                              focusNode: _passwordFocusNode, 
                               onChanged: (val) => _checkPasswordRequirements(),
                             ),
                             
-                            // ⭐ NEW: Wrapped in AnimatedSize. It expands beautifully when focused!
                             AnimatedSize(
                               duration: const Duration(milliseconds: 250),
                               curve: Curves.easeInOut,
@@ -588,7 +607,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // ⭐ NEW: Added the FocusNode parameter to the method signature
   Widget _buildTextField({required String label, required String hint, required IconData icon, bool isPassword = false, bool isConfirmPassword = false, required TextEditingController controller, Function(String)? onChanged, FocusNode? focusNode}) {
     bool currentObscure = isConfirmPassword ? _obscureConfirmPassword : _obscurePassword;
 
@@ -606,7 +624,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 8),
         TextField(
           controller: controller, 
-          focusNode: focusNode, // ⭐ Hooked up the FocusNode here!
+          focusNode: focusNode, 
           obscureText: isPassword && currentObscure,
           onChanged: onChanged, 
           style: TextStyle(color: Colors.green.shade900, fontSize: 14),
