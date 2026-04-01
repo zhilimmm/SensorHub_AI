@@ -189,7 +189,7 @@ if (widget.isLoggedIn) ...[
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('FRIDAY, MARCH 27, 2026', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                          Text('Wednesday, April 1, 2026', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                           const SizedBox(height: 4),
                           // ⭐ Inject the dynamic location here!
                           Text(
