@@ -12,7 +12,7 @@ Future<void> main() async {
   // Ensure Flutter bindings are initialized before calling async code
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase with your unique keys
+  // Initialize Supabase with the unique keys
   await Supabase.initialize(
     url: 'https://reszkykrwtcvnvpcmdzj.supabase.co', 
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlc3preWtyd3Rjdm52cGNtZHpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3ODQ0NjgsImV4cCI6MjA5MDM2MDQ2OH0.Gm4S2tqhU1A0oLC6-5qs9MFlj5WzUFP2eHt2pL90DI0',                   
@@ -49,10 +49,9 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
   
-  // ⭐ Changed to late variable
   late bool _isLoggedIn;
 
-  // ⭐ ADDED: Dynamically check Supabase on load
+  // Dynamically check Supabase on load
   @override
   void initState() {
     super.initState();
