@@ -14,25 +14,78 @@ class HomeTab extends StatefulWidget {
 
 class _HomeTabState extends State<HomeTab> {
   final ScrollController _scrollController = ScrollController();
-  String _selectedZone = 'Zone A: Seeding Chamber'; 
-  final List<String> _zones = [
-    'Zone A: Seeding Chamber',  
-    'Zone B: Harvest Ready Bay', 
-    'Zone C: Idle', 
-    'All Zones'
-  ];
   
   String _fetchedUserName = 'Loading...';
-  // ⭐ NEW: Add a variable to store the user's location
   String _fetchedLocation = 'Loading...'; 
-  bool _hasProfileData = false; 
+  bool _hasProfileData = false;
+
+  // Live telemetry values from physical sensors
+  double? _liveTemp;
+  double? _liveHumidity;
+  int? _liveLight;
+  int? _liveMoisture;
+  double? _livePh;
+  bool _isLoadingTelemetry = true; 
 
   @override
   void initState() {
     super.initState();
     if (widget.isLoggedIn) {
       _fetchUserProfile();
+      _setupSensorStream();
     }
+  }
+
+  void _setupSensorStream() {
+    debugPrint("--- STARTING SENSOR FETCH ---");
+    // 1. Initial fetch of the most recent reading
+    Supabase.instance.client
+        .from('sweet_potato_leave_data')
+        .select()
+        .order('created_at', ascending: false) 
+        .limit(1)
+        .maybeSingle()
+        .then((data) {
+      debugPrint("--- SENSOR DATA RECEIVED: $data ---");
+      if (mounted && data != null) {
+        setState(() {
+          _liveTemp = (data['temperature'] != null) ? (data['temperature'] as num).toDouble() : null;
+          _liveHumidity = (data['humidity'] != null) ? (data['humidity'] as num).toDouble() : null;
+          _liveLight = (data['light'] != null) ? (data['light'] as num).toInt() : null;
+          _liveMoisture = (data['soil_moisture'] != null) ? (data['soil_moisture'] as num).toInt() : null;
+          _livePh = (data['ph_value'] != null) ? (data['ph_value'] as num).toDouble() : null;
+          _isLoadingTelemetry = false;
+        });
+      } else {
+        if (mounted) setState(() => _isLoadingTelemetry = false);
+      }
+    }).catchError((e) {
+      debugPrint('❌ Error fetching latest sensor reading: $e');
+      if (mounted) setState(() => _isLoadingTelemetry = false);
+    });
+
+    // 2. Realtime listener
+    Supabase.instance.client
+        .from('sweet_potato_leave_data')
+        .stream(primaryKey: ['id'])
+        .order('id', ascending: false)
+        .limit(1)
+        .listen((List<Map<String, dynamic>> records) {
+      debugPrint("--- REALTIME SENSOR UPDATE: $records ---");
+      if (mounted && records.isNotEmpty) {
+        final latest = records.first;
+        setState(() {
+          _liveTemp = (latest['temperature'] != null) ? (latest['temperature'] as num).toDouble() : null;
+          _liveHumidity = (latest['humidity'] != null) ? (latest['humidity'] as num).toDouble() : null;
+          _liveLight = (latest['light'] != null) ? (latest['light'] as num).toInt() : null;
+          _liveMoisture = (latest['soil_moisture'] != null) ? (latest['soil_moisture'] as num).toInt() : null;
+          _livePh = (latest['ph_value'] != null) ? (latest['ph_value'] as num).toDouble() : null;
+          _isLoadingTelemetry = false;
+        });
+      }
+    }, onError: (err) {
+      debugPrint("❌ Realtime stream error: $err");
+    });
   }
 
   Future<void> _fetchUserProfile() async {
@@ -40,7 +93,6 @@ class _HomeTabState extends State<HomeTab> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
-      // ⭐ UPDATE: Select city, state, and country from Supabase
       final data = await Supabase.instance.client
           .from('profiles')
           .select('username, city, state, country') 
@@ -53,7 +105,6 @@ class _HomeTabState extends State<HomeTab> {
             _fetchedUserName = data['username']; 
             _hasProfileData = true; 
             
-            // ⭐ Determine the best location string to show
             if (data['city'] != null) {
               _fetchedLocation = data['city'];
             } else if (data['state'] != null) {
@@ -66,7 +117,7 @@ class _HomeTabState extends State<HomeTab> {
           } else {
             _fetchedUserName = user.email!.split('@')[0];
             _hasProfileData = false; 
-            _fetchedLocation = 'Location not set'; // Default for new users
+            _fetchedLocation = 'Location not set';
           }
         });
       }
@@ -90,15 +141,8 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    String currentZoneType = 'A';
-    if (_selectedZone.contains('Zone B')) currentZoneType = 'B';
-    if (_selectedZone.contains('Zone C')) currentZoneType = 'C';
-    if (_selectedZone.contains('All Zones')) currentZoneType = 'ALL';
-
-    // ⭐ Force into Grey/Idle Zone C if they are logged out OR if they are a new account with no data
-    if (!widget.isLoggedIn || !_hasProfileData) {
-      currentZoneType = 'C';
-    }
+    // A single boolean determines if the app should show real data or standby/offline data
+    final bool isActive = widget.isLoggedIn && _hasProfileData;
 
     return Container(
       color: const Color(0xFFEDF7F0),
@@ -116,19 +160,19 @@ class _HomeTabState extends State<HomeTab> {
               children: [
                 _buildGreetingAndWeatherWidget(),
                 const SizedBox(height: 16),
-                _buildZoneDropdown(),
+                _buildActiveZoneIndicator(isActive), // ⭐ Replaced dropdown
                 const SizedBox(height: 24),
                 const Text('OVERALL HEALTH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), letterSpacing: 1.2)),
                 const SizedBox(height: 8),
-                _buildHealthWidget(currentZoneType),
+                _buildHealthWidget(isActive),
                 const SizedBox(height: 24),
-                _buildLiveTelemetryWidget(currentZoneType),
+                _buildLiveTelemetryWidget(isActive),
                 const SizedBox(height: 32), 
-                _buildActiveAlertsWidget(currentZoneType),
+                _buildActiveAlertsWidget(isActive),
                 const SizedBox(height: 32),
-                _buildNextActionsWidget(currentZoneType),
+                _buildNextActionsWidget(isActive),
                 const SizedBox(height: 24),
-                _buildAIPredictionWidget(currentZoneType, widget.isLoggedIn && _hasProfileData),
+                _buildAIPredictionWidget(isActive),
                 const SizedBox(height: 40),
               ],
             ),
@@ -171,8 +215,7 @@ class _HomeTabState extends State<HomeTab> {
               : 'System offline. Please log in to connect.',
             style: TextStyle(fontSize: 14, color: const Color(0xFF333333).withOpacity(0.7), fontWeight: FontWeight.w500),
           ),
-          
-if (widget.isLoggedIn) ...[
+          if (widget.isLoggedIn) ...[
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(20),
@@ -191,7 +234,6 @@ if (widget.isLoggedIn) ...[
                         children: [
                           Text('Wednesday, April 1, 2026', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                           const SizedBox(height: 4),
-                          // ⭐ Inject the dynamic location here!
                           Text(
                             _hasProfileData ? _fetchedLocation : 'Location not set', 
                             style: TextStyle(
@@ -213,7 +255,6 @@ if (widget.isLoggedIn) ...[
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ⭐ Hide temperature and condition if not configured
                               Text(_hasProfileData ? '32°C' : '--°C', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: _hasProfileData ? const Color(0xFF222222) : Colors.grey.shade600, height: 1.1)),
                               Text(_hasProfileData ? 'Partly Cloudy' : '--', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700)),
                             ],
@@ -228,7 +269,6 @@ if (widget.isLoggedIn) ...[
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // ⭐ Hide bottom metrics if not configured
                       _buildWeatherDetail(Icons.air, _hasProfileData ? '12 km/h' : '--'),
                       _buildWeatherDetail(Icons.water_drop_outlined, _hasProfileData ? '68%' : '--'),
                       _buildWeatherDetail(Icons.umbrella_outlined, _hasProfileData ? '10% rain' : '--'),
@@ -253,83 +293,36 @@ if (widget.isLoggedIn) ...[
     );
   }
 
-  Widget _buildZoneDropdown() {
+  // ⭐ Replaced dropdown with a static status card
+  Widget _buildActiveZoneIndicator(bool isActive) {
     return Container(
       width: double.infinity, 
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 4), 
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), 
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          isExpanded: true, 
-          // ⭐ Lock to Zone C if no data
-          value: (widget.isLoggedIn && _hasProfileData) ? _selectedZone : 'Zone C: Idle',
-          icon: Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 24), 
-          elevation: 8, 
-          borderRadius: BorderRadius.circular(24), 
-          dropdownColor: Colors.white, 
-          items: _zones.map<DropdownMenuItem<String>>((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Row(
-                children: [
-                  Icon(Icons.local_florist, color: (widget.isLoggedIn && _hasProfileData) ? const Color(0xFF064E3B) : Colors.grey.shade500, size: 22),
-                  const SizedBox(width: 12),
-                  Text(value, style: TextStyle(color: (widget.isLoggedIn && _hasProfileData) ? const Color(0xFF064E3B) : Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 13)), 
-                ],
-              ),
-            );
-          }).toList(),
-          // ⭐ Disable click if no data
-          onChanged: (widget.isLoggedIn && _hasProfileData) ? (String? newValue) {
-            if (newValue != null) {
-              setState(() { _selectedZone = newValue; });
-            }
-          } : null, 
-        ),
+      child: Row(
+        children: [
+          Icon(Icons.local_florist, color: isActive ? const Color(0xFF064E3B) : Colors.grey.shade500, size: 22),
+          const SizedBox(width: 12),
+          Text(
+            isActive ? 'Smart Planter (Active)' : 'System Standby', 
+            style: TextStyle(color: isActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 14)
+          ), 
+          const Spacer(),
+          CircleAvatar(radius: 4, backgroundColor: isActive ? Colors.greenAccent.shade700 : Colors.grey.shade400)
+        ],
       ),
     );
   }
 
-  Widget _buildHealthWidget(String zoneType) {
-    Color mainBgColor = const Color(0xFFA1E6A1); 
-    Color darkGreen = const Color(0xFF064E3B);
-    Color progressFillColor = const Color.fromARGB(255, 62, 154, 109); 
-    Color progressTrackColor = const Color(0xFFE8F5E9); 
-
-    String healthStatus;
-    String healthDesc;
-    double progressValue;
-    String percentage;
-
-    if (zoneType == 'A') {
-      healthStatus = 'Excellent';
-      healthDesc = 'Early growth stage optimal';
-      progressValue = 0.94;
-      percentage = '94%';
-    } else if (zoneType == 'B') {
-      healthStatus = 'Peak';
-      healthDesc = 'Ready for harvest window';
-      progressValue = 0.99;
-      percentage = '99%';
-    } else if (zoneType == 'C') {
-      mainBgColor = Colors.grey.shade200;
-      darkGreen = Colors.grey.shade700;
-      progressFillColor = Colors.grey.shade500;
-      progressTrackColor = Colors.grey.shade300;
-      healthStatus = 'Standby';
-      healthDesc = 'No active crops assigned';
-      progressValue = 0.0;
-      percentage = '0%';
-    } else {
-      healthStatus = 'Optimal';
-      healthDesc = 'Greenhouse overall average';
-      progressValue = 0.96;
-      percentage = '96%';
-    }
+  Widget _buildHealthWidget(bool isActive) {
+    Color mainBgColor = isActive ? const Color(0xFFA1E6A1) : Colors.grey.shade200; 
+    Color darkGreen = isActive ? const Color(0xFF064E3B) : Colors.grey.shade700;
+    Color progressFillColor = isActive ? const Color.fromARGB(255, 62, 154, 109) : Colors.grey.shade500; 
+    Color progressTrackColor = isActive ? const Color(0xFFE8F5E9) : Colors.grey.shade300; 
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -346,9 +339,9 @@ if (widget.isLoggedIn) ...[
               children: [
                 Text('HEALTH INDEX', style: TextStyle(color: darkGreen.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
                 const SizedBox(height: 4),
-                Text(healthStatus, style: TextStyle(color: darkGreen, fontSize: 30, fontWeight: FontWeight.w900)),
+                Text(isActive ? 'Excellent' : 'Standby', style: TextStyle(color: darkGreen, fontSize: 30, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 8),
-                Text(healthDesc, style: TextStyle(color: darkGreen, fontSize: 12, fontWeight: FontWeight.w500)),
+                Text(isActive ? 'Optimal growth detected' : 'No active crop assigned', style: TextStyle(color: darkGreen, fontSize: 12, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
@@ -362,13 +355,13 @@ if (widget.isLoggedIn) ...[
                     height: 70, 
                     width: 70,
                     child: CircularProgressIndicator(
-                      value: progressValue, 
+                      value: isActive ? 0.94 : 0.0, 
                       backgroundColor: progressTrackColor,
                       valueColor: AlwaysStoppedAnimation<Color>(progressFillColor),
                       strokeWidth: 8, 
                     ),
                   ),
-                  Text(percentage, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: darkGreen)),
+                  Text(isActive ? '94%' : '0%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: darkGreen)),
                 ],
               ),
             ],
@@ -378,36 +371,96 @@ if (widget.isLoggedIn) ...[
     );
   }
 
-  Widget _buildLiveTelemetryWidget(String zoneType) {
+  Widget _buildLiveTelemetryWidget(bool isActive) {
+    // Loading spinner if active but still fetching
+    if (isActive && _isLoadingTelemetry) {
+      return Container(
+        height: 180,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))
+          ],
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Color(0xFF006947)),
+            SizedBox(height: 14),
+            Text(
+              'Connecting to sensors...',
+              style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      );
+    }
+
+    String getMoistStatus(int? moist) {
+      if (moist == null) return 'idle';
+      if (moist < 30) return 'danger';
+      if (moist < 60) return 'warning';
+      return 'optimal';
+    }
+
+    String getTempStatus(double? temp) {
+      if (temp == null) return 'idle';
+      if (temp > 32 || temp < 15) return 'danger';
+      if (temp > 28 || temp < 18) return 'warning';
+      return 'optimal';
+    }
+
+    String getHumidStatus(double? humid) {
+      if (humid == null) return 'idle';
+      if (humid > 85 || humid < 30) return 'warning';
+      return 'optimal';
+    }
+
     List<Widget> telemetryPills;
 
-    if (zoneType == 'A') {
+    if (isActive) {
       telemetryPills = [
-        _buildTelemetryPill('MOIST', '85%', Icons.water_drop, 'optimal'), 
+        _buildTelemetryPill(
+          'MOIST',
+          _liveMoisture != null ? '$_liveMoisture%' : '--',
+          Icons.water_drop,
+          getMoistStatus(_liveMoisture),
+        ),
         const SizedBox(width: 10),
-        _buildTelemetryPill('LUX', '800', Icons.light_mode, 'optimal'), 
+        _buildTelemetryPill(
+          'LUX',
+          _liveLight != null ? '${_liveLight!}' : '--',
+          Icons.light_mode,
+          'optimal',
+        ),
         const SizedBox(width: 10),
-        _buildTelemetryPill('TEMP', '24°', Icons.thermostat, 'optimal'),
+        _buildTelemetryPill(
+          'TEMP',
+          _liveTemp != null ? '${_liveTemp!.toStringAsFixed(1)}°' : '--',
+          Icons.thermostat,
+          getTempStatus(_liveTemp),
+        ),
         const SizedBox(width: 10),
-        _buildTelemetryPill('PH', '6.2', Icons.science, 'optimal'),
+        _buildTelemetryPill(
+          'PH',
+          _livePh != null ? _livePh!.toStringAsFixed(1) : '--',
+          Icons.science,
+          'optimal',
+        ),
         const SizedBox(width: 10),
-        _buildTelemetryPill('HUMID', '90%', Icons.air, 'warning'),
+        _buildTelemetryPill(
+          'HUMID',
+          _liveHumidity != null ? '${_liveHumidity!.toStringAsFixed(0)}%' : '--',
+          Icons.air,
+          getHumidStatus(_liveHumidity),
+        ),
       ];
-    } else if (zoneType == 'B') {
+    } else {
       telemetryPills = [
-        _buildTelemetryPill('MOIST', '40%', Icons.water_drop, 'warning'), 
-        const SizedBox(width: 10),
-        _buildTelemetryPill('LUX', '1.8k', Icons.light_mode, 'optimal'),
-        const SizedBox(width: 10),
-        _buildTelemetryPill('TEMP', '26°', Icons.thermostat, 'optimal'),
-        const SizedBox(width: 10),
-        _buildTelemetryPill('PH', '6.5', Icons.science, 'optimal'),
-        const SizedBox(width: 10),
-        _buildTelemetryPill('HUMID', '55%', Icons.air, 'optimal'),
-      ];
-    } else if (zoneType == 'C') {
-      telemetryPills = [
-        _buildTelemetryPill('MOIST', '--', Icons.water_drop, 'idle'), 
+        _buildTelemetryPill('MOIST', '--', Icons.water_drop, 'idle'),
         const SizedBox(width: 10),
         _buildTelemetryPill('LUX', '--', Icons.light_mode, 'idle'),
         const SizedBox(width: 10),
@@ -417,18 +470,6 @@ if (widget.isLoggedIn) ...[
         const SizedBox(width: 10),
         _buildTelemetryPill('HUMID', '--', Icons.air, 'idle'),
       ];
-    } else {
-      telemetryPills = [
-        _buildTelemetryPill('MOIST', '62%', Icons.water_drop, 'optimal'), 
-        const SizedBox(width: 10),
-        _buildTelemetryPill('LUX', '1.3k', Icons.light_mode, 'optimal'),
-        const SizedBox(width: 10),
-        _buildTelemetryPill('TEMP', '25°', Icons.thermostat, 'optimal'),
-        const SizedBox(width: 10),
-        _buildTelemetryPill('PH', '6.3', Icons.science, 'optimal'),
-        const SizedBox(width: 10),
-        _buildTelemetryPill('HUMID', '72%', Icons.air, 'optimal'),
-      ];
     }
 
     return Container(
@@ -436,12 +477,26 @@ if (widget.isLoggedIn) ...[
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))]
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Text('LIVE TELEMETRY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 2)),
+          const Text(
+            'LIVE TELEMETRY',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+              letterSpacing: 2,
+            ),
+          ),
           const SizedBox(height: 16),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
@@ -516,7 +571,7 @@ if (widget.isLoggedIn) ...[
     );
   }
 
-  Widget _buildActiveAlertsWidget(String zoneType) {
+  Widget _buildActiveAlertsWidget(bool isActive) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -526,7 +581,11 @@ if (widget.isLoggedIn) ...[
             const Text('Active Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
             InkWell(
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));              },
+                Navigator.push(
+                  context, 
+                  MaterialPageRoute(builder: (context) => NotificationsScreen(isLoggedIn: widget.isLoggedIn))
+                );
+              },
               child: Padding(
                 padding: const EdgeInsets.all(4.0),
                 child: Text('VIEW MORE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
@@ -536,26 +595,18 @@ if (widget.isLoggedIn) ...[
         ),
         const SizedBox(height: 16),
         
-        if (zoneType == 'A') ...[
-          _buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, '(Zone A) Humidity exceeds 85%', 'Seeding Tray Tray #4', '5m ago'),
+        if (isActive) ...[
+          _buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, 'Humidity exceeds 85%', 'Smart Planter', '5m ago'),
           const SizedBox(height: 12),
-          _buildNewAlertRow(Icons.lightbulb, Colors.amber.shade600, '(Zone A) Grow lights active', 'Supplemental trays 1-10', '1h ago'),
-        ] else if (zoneType == 'B') ...[
-          _buildNewAlertRow(Icons.check_circle, Colors.green.shade600, '(Zone B) Ready for harvest', 'Harvest window is open', '1h ago'),
-          const SizedBox(height: 12),
-          _buildNewAlertRow(Icons.warning_rounded, Colors.orange.shade700, '(Zone B) Low Moisture Detected', 'Pre-harvest drying in progress', '2h ago'),
-        ] else if (zoneType == 'C') ...[
-          _buildEmptyStateRow(Icons.notifications_paused, 'No active alerts for this zone.'),
+          _buildNewAlertRow(Icons.lightbulb, Colors.amber.shade600, 'Grow lights active', 'Supplemental lighting', '1h ago'),
         ] else ...[
-          _buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, '(Zone A) Humidity exceeds 85%', 'Seeding Tray Tray #4', '5m ago'),
-          const SizedBox(height: 12),
-          _buildNewAlertRow(Icons.check_circle, Colors.green.shade600, '(Zone B) Ready for harvest', 'Harvest window is open', '1h ago'),
+          _buildEmptyStateRow(Icons.notifications_paused, 'No active alerts.'),
         ]
       ],
     );
   }
 
-  Widget _buildNextActionsWidget(String zoneType) {
+  Widget _buildNextActionsWidget(bool isActive) {
     return Column( 
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -578,20 +629,12 @@ if (widget.isLoggedIn) ...[
         ),
         const SizedBox(height: 16),
         
-        if (zoneType == 'A') ...[
-          _buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, '(Zone A) Gentle Ventilation', 'Seedling propagation chamber'),
+        if (isActive) ...[
+          _buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, 'Gentle Ventilation', 'Scheduled exhaust cycle'),
           const SizedBox(height: 12),
-          _buildNewActionRow(Icons.eco, Colors.green.shade100, Colors.green.shade800, '(Zone A) Mist Propagation', 'Rooting trays 1-10Misting Cycle'),
-        ] else if (zoneType == 'B') ...[
-          _buildNewActionRow(Icons.content_cut, Colors.orange.shade100, Colors.orange.shade800, '(Zone B) Initiate Harvest', 'Manual harvest required'),
-          const SizedBox(height: 12),
-          _buildNewActionRow(Icons.cleaning_services, Colors.blue.shade100, Colors.blue.shade700, '(Zone B) Flush Water Lines', 'Hydroponic System A cleaning'),
-        ] else if (zoneType == 'C') ...[
-           _buildEmptyStateRow(Icons.event_busy, 'No upcoming actions estimated.'),
+          _buildNewActionRow(Icons.eco, Colors.green.shade100, Colors.green.shade800, 'Mist Propagation', 'Misting Cycle'),
         ] else ...[
-          _buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, '(Zone A) Gentle Ventilation', 'Seedling propagation chamber'),
-          const SizedBox(height: 12),
-          _buildNewActionRow(Icons.content_cut, Colors.orange.shade100, Colors.orange.shade800, '(Zone B) Initiate Harvest', 'Manual harvest required'),
+          _buildEmptyStateRow(Icons.event_busy, 'No upcoming actions estimated.'),
         ]
       ],
     );
@@ -671,26 +714,14 @@ if (widget.isLoggedIn) ...[
     );
   }
 
-  Widget _buildAIPredictionWidget(String zoneType, bool isActive) {
-    String aiMessage;
-
-    // ⭐ Handle the offline/unconfigured state first
-    if (!isActive) {
-      aiMessage = 'System offline. Please log in and configure your profile to view AI insights.';
-    } else if (zoneType == 'A') {
-      aiMessage = '(Zone A) Seedling roots established. True leaves expected in 5 days.';
-    } else if (zoneType == 'B') {
-      aiMessage = '(Zone B) Fruit ripening complete. Optimal Sugar Brix content detected.';
-    } else if (zoneType == 'C') {
-      aiMessage = '(Zone C) Zone is currently idle. System standing by for new crop assignment.';
-    } else {
-      aiMessage = '(All Zones) Overall resource distribution is balanced. Water usage optimized by 15%.';
-    }
+  Widget _buildAIPredictionWidget(bool isActive) {
+    String aiMessage = isActive 
+      ? 'Seedling roots established. True leaves expected in 5 days based on current humidity and lux exposure.' 
+      : 'System offline. Please log in and configure your profile to view AI insights.';
 
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        // ⭐ Change background to grey if not active
         color: isActive ? const Color(0xFF022C22) : Colors.grey.shade200, 
         borderRadius: BorderRadius.circular(24), 
         border: Border.all(color: isActive ? Colors.green.shade900 : Colors.grey.shade300)
@@ -720,28 +751,6 @@ if (widget.isLoggedIn) ...[
           )
         ],
       ),
-    );
-  }
-}
-
-class DummyNotificationsScreen extends StatelessWidget {
-  const DummyNotificationsScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Notifications')),
-      body: const Center(child: Text('Here is the Notifications Page')),
-    );
-  }
-}
-
-class DummyControlsScreen extends StatelessWidget {
-  const DummyControlsScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Manual Controls / Schedule')),
-      body: const Center(child: Text('Here is the Controls Page')),
     );
   }
 }
