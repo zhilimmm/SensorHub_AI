@@ -146,8 +146,7 @@ class _DataTabState extends State<DataTab> {
               primary: Colors.blue.shade600, 
               onPrimary: Colors.white,
               onSurface: const Color(0xFF333333), 
-            ),
-            dialogBackgroundColor: Colors.white,
+            ), dialogTheme: DialogThemeData(backgroundColor: Colors.white),
           ),
           child: Center(
             child: ConstrainedBox(

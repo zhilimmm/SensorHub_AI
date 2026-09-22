@@ -149,6 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
         final AuthResponse res = await supabase.auth.signUp(
           email: email,
           password: password,
+          emailRedirectTo: 'io.supabase.sensorhub://login-callback/',
         );
 
         if (mounted) {

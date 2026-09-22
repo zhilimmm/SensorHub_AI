@@ -208,7 +208,7 @@ class _AITabState extends State<AITab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(switchLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey.shade600)),
-              Switch(value: _isActive ? switchVal : false, onChanged: _isActive ? (val) {} : null, activeColor: const Color(0xFF006947)),
+              Switch(value: _isActive ? switchVal : false, onChanged: _isActive ? (val) {} : null, activeThumbColor: const Color(0xFF006947)),
             ],
           )
         ],

@@ -212,7 +212,7 @@ class _ControlsTabState extends State<ControlsTab> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _isActive ? iconColor.shade100 : Colors.grey.shade100, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: _isActive ? iconColor.shade700 : Colors.grey.shade400)),
-              Switch(value: _isActive ? val : false, onChanged: _isActive ? onChanged : null, activeColor: const Color(0xFF006947)),
+              Switch(value: _isActive ? val : false, onChanged: _isActive ? onChanged : null, activeThumbColor: const Color(0xFF006947)),
             ],
           ),
           const Spacer(), // ⭐ Pushes the text down so the card feels tall and substantial

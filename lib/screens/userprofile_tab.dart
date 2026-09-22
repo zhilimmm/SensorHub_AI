@@ -531,7 +531,7 @@ class _SettingsTabState extends State<SettingsTab> {
           Switch(
             value: widget.isLoggedIn ? value : false,
             onChanged: widget.isLoggedIn ? onChanged : null,
-            activeColor: Colors.white,
+            activeThumbColor: Colors.white,
             activeTrackColor: _darkGreen,
             inactiveThumbColor: Colors.white,
             inactiveTrackColor: Colors.grey.shade300,
