@@ -14,24 +14,23 @@ class _ControlsTabState extends State<ControlsTab> {
   bool _hasProfileData = false;
   bool get _isActive => widget.isLoggedIn && _hasProfileData;
 
-  // Toggle States
-  bool _pumpOn = false;
-  bool _fanOn = false;
+  // Track Mode
+  bool _automationActive = true;
 
-  // ⭐ NEW: Zone Dropdown State
-  String _selectedZone = 'Zone A: Seeding Chamber'; 
-  final List<String> _zones = [
-    'Zone A: Seeding Chamber',  
-    'Zone B: Harvest Ready Bay', 
-    'Zone C: Idle', 
-    'All Zones'
-  ];
+  // Track Manual States
+  bool _manualPumpOn = false;
+  bool _manualFanOn = false;
+
+  // Track Auto States
+  bool _autoPumpOn = false;
+  bool _autoFanOn = false;
 
   @override
   void initState() {
     super.initState();
     if (widget.isLoggedIn) {
       _checkProfileStatus();
+      _setupRealtimeStreams();
     }
   }
 
@@ -47,6 +46,80 @@ class _ControlsTabState extends State<ControlsTab> {
       }
     } catch (e) {
       debugPrint("ControlsTab error: $e");
+    }
+  }
+
+  void _setupRealtimeStreams() {
+    // 1. Listen for Mode and Manual Overrides
+    Supabase.instance.client
+        .from('device_controls')
+        .stream(primaryKey: ['id'])
+        .eq('id', 1)
+        .listen((List<Map<String, dynamic>> records) {
+      if (mounted && records.isNotEmpty) {
+        setState(() {
+          _automationActive = records.first['automation_active'] ?? true;
+          _manualPumpOn = records.first['pump_manual_override'] ?? false;
+          _manualFanOn = records.first['fan_manual_override'] ?? false;
+        });
+      }
+    });
+
+    // 2. Listen for Live Sensor Triggers
+    Supabase.instance.client
+        .from('sweet_potato_leave_data')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .limit(1)
+        .listen((List<Map<String, dynamic>> records) {
+      if (mounted && records.isNotEmpty) {
+        setState(() {
+          _autoPumpOn = (records.first['irrigation_need'] == 1);
+          _autoFanOn = (records.first['ventilation_need'] == 1);
+        });
+      }
+    });
+  }
+
+  // Switches system between AI Auto and Manual Override
+  Future<void> _setAutomationMode(bool isActive) async {
+    try {
+      await Supabase.instance.client
+          .from('device_controls')
+          .update({'automation_active': isActive})
+          .eq('id', 1);
+    } catch (e) {
+      debugPrint("Error setting mode: $e");
+    }
+  }
+
+  // Sends the manual command and instantly pauses AI if it was running
+  Future<void> _toggleDevice(String deviceColumn, bool turnOn) async {
+    if (_automationActive) {
+      _setAutomationMode(false); // Pause AI when user intervenes
+    }
+    try {
+      await Supabase.instance.client
+          .from('device_controls')
+          .update({deviceColumn: turnOn})
+          .eq('id', 1);
+    } catch (e) {
+      debugPrint("Error updating $deviceColumn: $e");
+    }
+  }
+
+  Future<void> _emergencyStopAll() async {
+    try {
+      await Supabase.instance.client
+          .from('device_controls')
+          .update({
+            'automation_active': false,
+            'pump_manual_override': false, 
+            'fan_manual_override': false
+          })
+          .eq('id', 1);
+    } catch (e) {
+      debugPrint("Error triggering kill switch: $e");
     }
   }
 
@@ -66,7 +139,7 @@ class _ControlsTabState extends State<ControlsTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildTopTitles(),
-              _buildZoneDropdown(), // ⭐ Added the zone dropdown
+              if (_isActive) _buildAutomationBanner(),
               const SizedBox(height: 24),
               _buildGrid(),
               const SizedBox(height: 32),
@@ -88,97 +161,44 @@ class _ControlsTabState extends State<ControlsTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            'SYSTEM CONTROLS', 
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2, color: _isActive ? const Color(0xFF005A3C) : Colors.grey.shade500)
-          ),
+          Text('SYSTEM CONTROLS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2, color: _isActive ? const Color(0xFF005A3C) : Colors.grey.shade500)),
           const SizedBox(height: 8),
-          Text(
-            'Manual Override',
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: _isActive ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 12),
-          Text(
-            _isActive ? 'Direct hardware control interface. AI automation is currently active, manual changes will pause auto-optimization.' : 'System offline. Login required to access manual controls.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
-            textAlign: TextAlign.center,
-          ),
+          Text('Hardware Interface', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: _isActive ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1), textAlign: TextAlign.center),
         ],
       ),
     );
   }
 
-  // ⭐ NEW: Zone Dropdown Widget
-  Widget _buildZoneDropdown() {
+  // ⭐ NEW: Banner that shows if AI is running or paused
+  Widget _buildAutomationBanner() {
     return Container(
       width: double.infinity, 
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2), 
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16), 
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))],
+        color: _automationActive ? Colors.white : const Color(0xFFFFF7ED),
+        border: Border.all(color: _automationActive ? Colors.transparent : const Color(0xFFF6AD55), width: 2),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
       ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          isExpanded: true, 
-          value: _selectedZone,
-          icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600), 
-          items: _zones.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value, style: const TextStyle(color: Color(0xFF022C22), fontWeight: FontWeight.bold, fontSize: 14)), 
-            );
-          }).toList(),
-          onChanged: _isActive ? (String? newValue) {
-            if (newValue != null) {
-              setState(() { _selectedZone = newValue; });
-            }
-          } : null, 
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmergencyStop() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _isActive ? const Color(0xFFF95630).withOpacity(0.1) : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _isActive ? const Color(0xFFF95630).withOpacity(0.3) : Colors.grey.shade300),
-      ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12), 
-                decoration: BoxDecoration(color: _isActive ? const Color(0xFFB02500) : Colors.grey.shade400, shape: BoxShape.circle), 
-                child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 30)
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Emergency Stop All', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _isActive ? const Color(0xFF520C00) : Colors.grey.shade600)),
-                    Text('Instantly cut power to all actuators', style: TextStyle(fontSize: 12, color: _isActive ? const Color(0xFF520C00).withOpacity(0.8) : Colors.grey.shade500)),
-                  ],
-                ),
-              )
-            ],
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            height: 50,
-            child: ElevatedButton(
-              onPressed: _isActive ? () {} : null,
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB02500), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-              child: const Text('KILL SWITCH', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)),
+          Icon(_automationActive ? Icons.smart_toy : Icons.front_hand, color: _automationActive ? const Color(0xFF064E3B) : const Color(0xFFDD6B20), size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_automationActive ? 'AI Automation Active' : 'Manual Control Active', style: TextStyle(color: _automationActive ? const Color(0xFF064E3B) : const Color(0xFFDD6B20), fontWeight: FontWeight.bold, fontSize: 14)), 
+                Text(_automationActive ? 'Sensors control the hardware.' : 'AI paused. Hardware locked to switches.', style: TextStyle(color: _automationActive ? Colors.grey.shade600 : const Color(0xFFDD6B20), fontSize: 11)), 
+              ],
             ),
-          )
+          ),
+          if (!_automationActive) 
+            TextButton(
+              onPressed: () => _setAutomationMode(true),
+              style: TextButton.styleFrom(backgroundColor: const Color(0xFFDD6B20), padding: const EdgeInsets.symmetric(horizontal: 16)),
+              child: const Text("RESUME AI", style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+            )
         ],
       ),
     );
@@ -187,37 +207,38 @@ class _ControlsTabState extends State<ControlsTab> {
   Widget _buildGrid() {
     return Row(
       children: [
-        // ⭐ UPDATED: Passed specific height and distinct light blue/cyan colors
-        Expanded(child: _buildControlCard('Water Pump', 'Submersible A1', Icons.water_drop, Colors.blue, Colors.blue.shade50, 180, _pumpOn, (v) => setState(() => _pumpOn = v))),
+        Expanded(child: _buildControlCard('Water Pump', 'Submersible A1', Icons.water_drop, Colors.blue, Colors.blue.shade50, 190, _autoPumpOn, _manualPumpOn, (val) => _toggleDevice('pump_manual_override', val))),
         const SizedBox(width: 16),
-        Expanded(child: _buildControlCard('Vent Fan', 'Main Exhaust', Icons.air, Colors.green, Colors.cyan.shade50, 180, _fanOn, (v) => setState(() => _fanOn = v))),
+        Expanded(child: _buildControlCard('Vent Fan', 'Main Exhaust', Icons.air, Colors.green, Colors.cyan.shade50, 190, _autoFanOn, _manualFanOn, (val) => _toggleDevice('fan_manual_override', val))),
       ],
     );
   }
 
-  // ⭐ UPDATED: Added height and bgColor parameters, and a Spacer to push text to the bottom
-  Widget _buildControlCard(String title, String sub, IconData icon, MaterialColor iconColor, Color bgColor, double height, bool val, Function(bool) onChanged) {
+  Widget _buildControlCard(String title, String sub, IconData icon, MaterialColor iconColor, Color bgColor, double height, bool autoState, bool manualState, Function(bool) onChanged) {
+    // If automation is ON, display the live AI state. If OFF, display the forced manual switch state.
+    bool displayState = _automationActive ? autoState : manualState;
+    String statusText = _automationActive ? (autoState ? "AUTO: ON" : "AUTO: OFF") : (manualState ? "FORCED: ON" : "FORCED: OFF");
+    Color statusColor = _automationActive ? (autoState ? const Color(0xFFED8936) : Colors.grey.shade400) : (manualState ? iconColor.shade700 : Colors.grey.shade500);
+
     return Container(
       height: height,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _isActive ? bgColor : Colors.white, 
-        borderRadius: BorderRadius.circular(16), 
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)]
-      ),
+      decoration: BoxDecoration(color: _isActive && displayState ? bgColor : Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _isActive ? iconColor.shade100 : Colors.grey.shade100, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: _isActive ? iconColor.shade700 : Colors.grey.shade400)),
-              Switch(value: _isActive ? val : false, onChanged: _isActive ? onChanged : null, activeThumbColor: const Color(0xFF006947)),
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: _isActive && displayState ? iconColor.shade100 : Colors.grey.shade100, borderRadius: BorderRadius.circular(12)), child: Icon(icon, color: _isActive && displayState ? iconColor.shade700 : Colors.grey.shade400)),
+              Switch(value: _isActive ? displayState : false, onChanged: _isActive ? onChanged : null, activeThumbColor: const Color(0xFF006947)),
             ],
           ),
-          const Spacer(), // ⭐ Pushes the text down so the card feels tall and substantial
-          Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade500)),
+          const Spacer(),
+          Text(statusText, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: statusColor, letterSpacing: 1)),
           const SizedBox(height: 4),
+          Text(title, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade500)),
+          const SizedBox(height: 2),
           Text(sub.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1, color: Colors.grey.shade500)),
         ],
       ),
@@ -249,6 +270,34 @@ class _ControlsTabState extends State<ControlsTab> {
               Text(val, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade400)),
             ],
           )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmergencyStop() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(color: _isActive ? const Color(0xFFF95630).withOpacity(0.1) : Colors.grey.shade200, borderRadius: BorderRadius.circular(16), border: Border.all(color: _isActive ? const Color(0xFFF95630).withOpacity(0.3) : Colors.grey.shade300)),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _isActive ? const Color(0xFFB02500) : Colors.grey.shade400, shape: BoxShape.circle), child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 30)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Emergency Stop All', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: _isActive ? const Color(0xFF520C00) : Colors.grey.shade600)),
+                    Text('Instantly cut power to all actuators', style: TextStyle(fontSize: 12, color: _isActive ? const Color(0xFF520C00).withOpacity(0.8) : Colors.grey.shade500)),
+                  ],
+                ),
+              )
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(width: double.infinity, height: 50, child: ElevatedButton(onPressed: _isActive ? _emergencyStopAll : null, style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFB02500), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))), child: const Text('KILL SWITCH', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2)))),
         ],
       ),
     );
