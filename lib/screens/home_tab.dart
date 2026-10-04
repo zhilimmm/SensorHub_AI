@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'notifications_screen.dart';
@@ -27,6 +29,16 @@ class _HomeTabState extends State<HomeTab> {
   double? _livePh;
   bool _isLoadingTelemetry = true; 
 
+  // Real-time Weather Data
+  String _weatherTemp = '--°C';
+  String _weatherDesc = '--';
+  String _weatherWind = '-- km/h';
+  String _weatherHumid = '--%';
+  String _weatherRain = '-- mm';
+  IconData _weatherIcon = Icons.cloud;
+  Color _weatherIconColor = Colors.grey.shade400;
+  String _ecosystemSubtitle = 'Your ecosystem is flourishing today.';
+
   @override
   void initState() {
     super.initState();
@@ -36,9 +48,98 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
+  // Generates today's formatted date
+  String _getTodayDate() {
+    final now = DateTime.now();
+    final weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    final months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}, ${now.year}';
+  }
+
+  // Fetches real weather and dynamically updates weather greeting
+  Future<void> _fetchWeather(String location) async {
+    try {
+      final geoUrl = Uri.parse('https://geocoding-api.open-meteo.com/v1/search?name=$location&count=1&language=en&format=json');
+      final geoReq = await HttpClient().getUrl(geoUrl);
+      final geoRes = await geoReq.close();
+      final geoBody = await geoRes.transform(utf8.decoder).join();
+      final geoData = jsonDecode(geoBody);
+      
+      if (geoData['results'] == null || geoData['results'].isEmpty) return;
+      
+      final lat = geoData['results'][0]['latitude'];
+      final lon = geoData['results'][0]['longitude'];
+      
+      final weatherUrl = Uri.parse('https://api.open-meteo.com/v1/forecast?latitude=$lat&longitude=$lon&current=temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m');
+      final weatherReq = await HttpClient().getUrl(weatherUrl);
+      final weatherRes = await weatherReq.close();
+      final weatherBody = await weatherRes.transform(utf8.decoder).join();
+      final weatherData = jsonDecode(weatherBody);
+      
+      final current = weatherData['current'];
+      final code = current['weather_code'] as int;
+      final temp = (current['temperature_2m'] as num).toDouble();
+      
+      String desc = 'Clear';
+      IconData icon = Icons.wb_sunny;
+      Color color = Colors.orange;
+      String subtitle = 'Your ecosystem is flourishing today.';
+      
+      if (code <= 1) { 
+        desc = 'Clear'; 
+        icon = Icons.wb_sunny; 
+        color = Colors.orange; 
+        subtitle = 'Clear skies today. Optimal light exposure for your plants.';
+      } else if (code <= 3) { 
+        desc = 'Partly Cloudy'; 
+        icon = Icons.cloud; 
+        color = const Color(0xFF64B5F6); 
+        subtitle = 'Gentle cloud cover today. Balanced diffuse light for growth.';
+      } else if (code <= 48) { 
+        desc = 'Foggy'; 
+        icon = Icons.foggy; 
+        color = Colors.grey.shade400; 
+        subtitle = 'Misty conditions outdoors. Humidity balance is on watch.';
+      } else if (code <= 67) { 
+        desc = 'Rain'; 
+        icon = Icons.water_drop; 
+        color = Colors.blue.shade400; 
+        subtitle = 'Rainfall outside. Internal microclimate remains protected.';
+      } else if (code <= 77) { 
+        desc = 'Snow'; 
+        icon = Icons.ac_unit; 
+        color = Colors.lightBlue; 
+        subtitle = 'Chilly weather outside. Root warmth is fully maintained.';
+      } else { 
+        desc = 'Storm'; 
+        icon = Icons.thunderstorm; 
+        color = Colors.deepPurpleAccent; 
+        subtitle = 'Stormy conditions outside. Automated defenses standing guard.';
+      }
+
+      // Heat check override
+      if (temp >= 33.0) {
+        subtitle = 'High ambient heat today. Active ventilation is standing by.';
+      }
+
+      if (mounted) {
+        setState(() {
+          _weatherTemp = '${temp.round()}°C';
+          _weatherDesc = desc;
+          _weatherWind = '${current['wind_speed_10m'].round()} km/h';
+          _weatherHumid = '${current['relative_humidity_2m']}%';
+          _weatherRain = '${current['precipitation']} mm';
+          _weatherIcon = icon;
+          _weatherIconColor = color;
+          _ecosystemSubtitle = subtitle;
+        });
+      }
+    } catch (e) {
+      debugPrint('Weather API Error: $e');
+    }
+  }
+
   void _setupSensorStream() {
-    debugPrint("--- STARTING SENSOR FETCH ---");
-    // 1. Initial fetch of the most recent reading
     Supabase.instance.client
         .from('sweet_potato_leave_data')
         .select()
@@ -46,7 +147,6 @@ class _HomeTabState extends State<HomeTab> {
         .limit(1)
         .maybeSingle()
         .then((data) {
-      debugPrint("--- SENSOR DATA RECEIVED: $data ---");
       if (mounted && data != null) {
         setState(() {
           _liveTemp = (data['temperature'] != null) ? (data['temperature'] as num).toDouble() : null;
@@ -60,18 +160,15 @@ class _HomeTabState extends State<HomeTab> {
         if (mounted) setState(() => _isLoadingTelemetry = false);
       }
     }).catchError((e) {
-      debugPrint('❌ Error fetching latest sensor reading: $e');
       if (mounted) setState(() => _isLoadingTelemetry = false);
     });
 
-    // 2. Realtime listener
     Supabase.instance.client
         .from('sweet_potato_leave_data')
         .stream(primaryKey: ['id'])
         .order('id', ascending: false)
         .limit(1)
         .listen((List<Map<String, dynamic>> records) {
-      debugPrint("--- REALTIME SENSOR UPDATE: $records ---");
       if (mounted && records.isNotEmpty) {
         final latest = records.first;
         setState(() {
@@ -83,8 +180,6 @@ class _HomeTabState extends State<HomeTab> {
           _isLoadingTelemetry = false;
         });
       }
-    }, onError: (err) {
-      debugPrint("❌ Realtime stream error: $err");
     });
   }
 
@@ -112,22 +207,25 @@ class _HomeTabState extends State<HomeTab> {
             } else if (data['country'] != null) {
               _fetchedLocation = data['country'];
             } else {
-              _fetchedLocation = 'Location not set';
+              _fetchedLocation = 'Shah Alam'; 
             }
+            
+            _fetchWeather(_fetchedLocation);
           } else {
             _fetchedUserName = user.email!.split('@')[0];
             _hasProfileData = false; 
-            _fetchedLocation = 'Location not set';
+            _fetchedLocation = 'Shah Alam';
+            _fetchWeather(_fetchedLocation);
           }
         });
       }
     } catch (error) {
-      debugPrint('Error fetching name/location: $error');
       if (mounted) {
         setState(() {
           _fetchedUserName = Supabase.instance.client.auth.currentUser?.email?.split('@')[0] ?? 'User';
           _hasProfileData = false;
-          _fetchedLocation = 'Location not set';
+          _fetchedLocation = 'Shah Alam';
+          _fetchWeather(_fetchedLocation);
         });
       }
     }
@@ -141,7 +239,6 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
-    // A single boolean determines if the app should show real data or standby/offline data
     final bool isActive = widget.isLoggedIn && _hasProfileData;
 
     return Container(
@@ -154,26 +251,24 @@ class _HomeTabState extends State<HomeTab> {
         child: SingleChildScrollView(
           controller: _scrollController, 
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildGreetingAndWeatherWidget(),
                 const SizedBox(height: 16),
-                _buildActiveZoneIndicator(isActive), // ⭐ Replaced dropdown
-                const SizedBox(height: 24),
                 const Text('OVERALL HEALTH', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF064E3B), letterSpacing: 1.2)),
-                const SizedBox(height: 8),
+                const SizedBox(height: 5),
                 _buildHealthWidget(isActive),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 _buildLiveTelemetryWidget(isActive),
-                const SizedBox(height: 32), 
+                const SizedBox(height: 20), 
                 _buildActiveAlertsWidget(isActive),
-                const SizedBox(height: 32),
+                const SizedBox(height: 20),
                 _buildNextActionsWidget(isActive),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
                 _buildAIPredictionWidget(isActive),
-                const SizedBox(height: 40),
+                const SizedBox(height: 25),
               ],
             ),
           ),
@@ -182,11 +277,9 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // --- HELPER WIDGETS ---
-
   Widget _buildGreetingAndWeatherWidget() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16), 
       decoration: BoxDecoration(
         color: const Color.fromARGB(255, 255, 255, 255), 
         borderRadius: BorderRadius.circular(32),
@@ -211,14 +304,14 @@ class _HomeTabState extends State<HomeTab> {
           const SizedBox(height: 4),
           Text(
             widget.isLoggedIn 
-              ? (_hasProfileData ? 'Your ecosystem is flourishing today.' : 'Please complete your profile in Settings to connect.') 
+              ? (_hasProfileData ? _ecosystemSubtitle : 'Please complete your profile in Settings to connect.') 
               : 'System offline. Please log in to connect.',
             style: TextStyle(fontSize: 14, color: const Color(0xFF333333).withOpacity(0.7), fontWeight: FontWeight.w500),
           ),
           if (widget.isLoggedIn) ...[
-            const SizedBox(height: 24),
+            const SizedBox(height: 12), 
             Container(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(16), 
               decoration: BoxDecoration(
                 color: _hasProfileData ? const Color(0xFFAED9F1) : Colors.grey.shade200, 
                 borderRadius: BorderRadius.circular(24),
@@ -228,50 +321,61 @@ class _HomeTabState extends State<HomeTab> {
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Wednesday, April 1, 2026', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                          const SizedBox(height: 4),
-                          Text(
-                            _hasProfileData ? _fetchedLocation : 'Location not set', 
-                            style: TextStyle(
-                              color: _hasProfileData ? const Color(0xFF222222) : Colors.grey.shade600, 
-                              fontSize: 16, 
-                              fontWeight: FontWeight.w800,
-                              fontStyle: _hasProfileData ? FontStyle.normal : FontStyle.italic,
-                            )
-                          ),
-                        ],
+                      // Left: Date & Location takes all available extra space
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _getTodayDate().toUpperCase(), 
+                              style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _fetchedLocation, 
+                              style: TextStyle(
+                                color: _hasProfileData ? const Color(0xFF222222) : Colors.grey.shade600, 
+                                fontSize: 16, 
+                                fontWeight: FontWeight.w800,
+                                fontStyle: _hasProfileData ? FontStyle.normal : FontStyle.italic,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
                       ),
+                      // Right: Weather Icon grouped closely with Temperature
                       Row(
                         children: [
-                          Row(children: [
-                            Icon(Icons.wb_sunny, color: _hasProfileData ? Colors.orange : Colors.grey.shade400, size: 28), 
-                            Icon(Icons.cloud, color: _hasProfileData ? Colors.white : Colors.grey.shade300, size: 28)
-                          ]),
-                          const SizedBox(width: 8),
+                          Icon(
+                            _weatherIcon, 
+                            color: _hasProfileData ? _weatherIconColor : Colors.grey.shade400, 
+                            size: 40,
+                          ),
+                          const SizedBox(width: 35), // Controls the gap between the icon and temperature
                           Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
-                              Text(_hasProfileData ? '32°C' : '--°C', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: _hasProfileData ? const Color(0xFF222222) : Colors.grey.shade600, height: 1.1)),
-                              Text(_hasProfileData ? 'Partly Cloudy' : '--', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700)),
+                              Text(_hasProfileData ? _weatherTemp : '--°C', style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: _hasProfileData ? const Color(0xFF222222) : Colors.grey.shade600, height: 1.1)),
+                              Text(_hasProfileData ? _weatherDesc : '--', style: TextStyle(color: _hasProfileData ? const Color(0xFF666666) : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w700), textAlign: TextAlign.end),
                             ],
-                          )
+                          ),
                         ],
                       )
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 4), // Reduced top gap above divider
                   Divider(color: Colors.white.withOpacity(0.4), thickness: 1.5), 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 4), // Reduced bottom gap below divider
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildWeatherDetail(Icons.air, _hasProfileData ? '12 km/h' : '--'),
-                      _buildWeatherDetail(Icons.water_drop_outlined, _hasProfileData ? '68%' : '--'),
-                      _buildWeatherDetail(Icons.umbrella_outlined, _hasProfileData ? '10% rain' : '--'),
+                      _buildWeatherDetail(Icons.air, _hasProfileData ? _weatherWind : '--'),
+                      _buildWeatherDetail(Icons.water_drop_outlined, _hasProfileData ? _weatherHumid : '--'),
+                      _buildWeatherDetail(Icons.umbrella_outlined, _hasProfileData ? _weatherRain : '--'),
                     ],
                   )
                 ],
@@ -286,35 +390,10 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildWeatherDetail(IconData icon, String value) {
     return Row(
       children: [
-        Icon(icon, color: _hasProfileData ? Colors.green.shade700 : Colors.grey.shade500, size: 16),
+        Icon(icon, color: _hasProfileData ? Colors.green.shade700 : Colors.grey.shade500, size: 19),
         const SizedBox(width: 6),
-        Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: _hasProfileData ? const Color(0xFF333333) : Colors.grey.shade600)),
+        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: _hasProfileData ? const Color(0xFF333333) : Colors.grey.shade600)),
       ],
-    );
-  }
-
-  // ⭐ Replaced dropdown with a static status card
-  Widget _buildActiveZoneIndicator(bool isActive) {
-    return Container(
-      width: double.infinity, 
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16), 
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 10, offset: const Offset(0, 4))],
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.local_florist, color: isActive ? const Color(0xFF064E3B) : Colors.grey.shade500, size: 22),
-          const SizedBox(width: 12),
-          Text(
-            isActive ? 'Smart Planter (Active)' : 'System Standby', 
-            style: TextStyle(color: isActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 14)
-          ), 
-          const Spacer(),
-          CircleAvatar(radius: 4, backgroundColor: isActive ? Colors.greenAccent.shade700 : Colors.grey.shade400)
-        ],
-      ),
     );
   }
 
@@ -325,7 +404,7 @@ class _HomeTabState extends State<HomeTab> {
     Color progressTrackColor = isActive ? const Color(0xFFE8F5E9) : Colors.grey.shade300; 
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16), 
       decoration: BoxDecoration(
         color: mainBgColor,
         borderRadius: BorderRadius.circular(24),
@@ -372,7 +451,6 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Widget _buildLiveTelemetryWidget(bool isActive) {
-    // Loading spinner if active but still fetching
     if (isActive && _isLoadingTelemetry) {
       return Container(
         height: 180,
@@ -399,23 +477,35 @@ class _HomeTabState extends State<HomeTab> {
       );
     }
 
+    // Target: ~80%
     String getMoistStatus(int? moist) {
       if (moist == null) return 'idle';
-      if (moist < 30) return 'danger';
-      if (moist < 60) return 'warning';
+      if (moist < 50) return 'danger';
+      if (moist < 70) return 'warning';
       return 'optimal';
     }
 
+    // Target: 22°C - 28°C
     String getTempStatus(double? temp) {
       if (temp == null) return 'idle';
-      if (temp > 32 || temp < 15) return 'danger';
-      if (temp > 28 || temp < 18) return 'warning';
+      if (temp < 18 || temp > 32) return 'danger';
+      if (temp < 22 || temp > 28) return 'warning';
       return 'optimal';
     }
 
+    // Target: ~80%
     String getHumidStatus(double? humid) {
       if (humid == null) return 'idle';
-      if (humid > 85 || humid < 30) return 'warning';
+      if (humid < 60 || humid > 95) return 'danger';
+      if (humid < 70 || humid > 90) return 'warning';
+      return 'optimal';
+    }
+
+    // Target: ~6.5
+    String getPhStatus(double? ph) {
+      if (ph == null) return 'idle';
+      if (ph < 5.0 || ph > 8.0) return 'danger';
+      if (ph < 5.8 || ph > 7.2) return 'warning';
       return 'optimal';
     }
 
@@ -429,28 +519,28 @@ class _HomeTabState extends State<HomeTab> {
           Icons.water_drop,
           getMoistStatus(_liveMoisture),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill(
           'LUX',
           _liveLight != null ? '${_liveLight!}' : '--',
           Icons.light_mode,
-          'optimal',
+          'optimal', // Locked to always stay green
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill(
           'TEMP',
           _liveTemp != null ? '${_liveTemp!.toStringAsFixed(1)}°' : '--',
           Icons.thermostat,
           getTempStatus(_liveTemp),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill(
           'PH',
           _livePh != null ? _livePh!.toStringAsFixed(1) : '--',
           Icons.science,
-          'optimal',
+          getPhStatus(_livePh), 
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill(
           'HUMID',
           _liveHumidity != null ? '${_liveHumidity!.toStringAsFixed(0)}%' : '--',
@@ -461,19 +551,19 @@ class _HomeTabState extends State<HomeTab> {
     } else {
       telemetryPills = [
         _buildTelemetryPill('MOIST', '--', Icons.water_drop, 'idle'),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill('LUX', '--', Icons.light_mode, 'idle'),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill('TEMP', '--', Icons.thermostat, 'idle'),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill('PH', '--', Icons.science, 'idle'),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         _buildTelemetryPill('HUMID', '--', Icons.air, 'idle'),
       ];
     }
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12), 
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -491,13 +581,13 @@ class _HomeTabState extends State<HomeTab> {
           const Text(
             'LIVE TELEMETRY',
             style: TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               fontWeight: FontWeight.bold,
               color: Colors.grey,
               letterSpacing: 2,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             clipBehavior: Clip.none,
@@ -506,7 +596,7 @@ class _HomeTabState extends State<HomeTab> {
               children: telemetryPills,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -546,7 +636,7 @@ class _HomeTabState extends State<HomeTab> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10), 
       decoration: BoxDecoration(
         color: bgColor, 
         borderRadius: BorderRadius.circular(40),
@@ -562,7 +652,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
             child: Icon(icon, color: bgColor, size: 20), 
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8), 
           Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)), 
           const SizedBox(height: 4),
           Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white)), 
@@ -593,7 +683,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         
         if (isActive) ...[
           _buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, 'Humidity exceeds 85%', 'Smart Planter', '5m ago'),
@@ -627,7 +717,7 @@ class _HomeTabState extends State<HomeTab> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         
         if (isActive) ...[
           _buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, 'Gentle Ventilation', 'Scheduled exhaust cycle'),
