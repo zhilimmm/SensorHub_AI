@@ -1,6 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; // ⭐ Added Supabase import
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DataTab extends StatefulWidget {
   final bool isLoggedIn; 
@@ -25,10 +26,13 @@ class _DataTabState extends State<DataTab> {
   DateTimeRange? _customDateRange;
   bool _showAllLogSensors = false;
   
-  // ⭐ NEW: Profile data tracking
   bool _hasProfileData = false; 
+  bool _isLoadingData = true;
 
-  // ⭐ NEW: Getter that returns true ONLY if logged in AND configured
+  // Real sensor rows stored directly from Supabase
+  List<Map<String, dynamic>> _rawSensorData = [];
+  StreamSubscription<List<Map<String, dynamic>>>? _dataStreamSub;
+
   bool get _isDataActive => widget.isLoggedIn && _hasProfileData;
 
   final Map<String, Color> _paramColors = {
@@ -44,13 +48,22 @@ class _DataTabState extends State<DataTab> {
   @override
   void initState() {
     super.initState();
-    // ⭐ Fetch profile status on load
     if (widget.isLoggedIn) {
       _checkProfileStatus();
+      _fetchHistoricalData();
+      _setupDataStream();
     }
   }
 
-  // ⭐ NEW: Checks Supabase to see if the user has a username saved
+  @override
+  void dispose() {
+    _dataStreamSub?.cancel();
+    _mainScroll.dispose();
+    _tableVerticalScroll.dispose();
+    _tableHorizontalScroll.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkProfileStatus() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -72,16 +85,75 @@ class _DataTabState extends State<DataTab> {
     }
   }
 
-  @override
-  void dispose() {
-    _mainScroll.dispose();
-    _tableVerticalScroll.dispose();
-    _tableHorizontalScroll.dispose();
-    super.dispose();
+  // Calculate the query start boundary
+  DateTime _getStartDate() {
+    if (_customDateRange != null) return _customDateRange!.start;
+    if (_selectedDateRange == 'Last 7 Days') {
+      return DateTime.now().subtract(const Duration(days: 7));
+    }
+    return DateTime.now().subtract(const Duration(days: 30));
+  }
+
+  // Calculate the query end boundary
+  DateTime _getEndDate() {
+    if (_customDateRange != null) {
+      return DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
+    }
+    return DateTime.now();
+  }
+
+  // Fetch real sensor records from Supabase
+  Future<void> _fetchHistoricalData() async {
+    setState(() => _isLoadingData = true);
+    try {
+      final startIso = _getStartDate().toIso8601String();
+      final endIso = _getEndDate().toIso8601String();
+
+      final response = await Supabase.instance.client
+          .from('sweet_potato_leave_data')
+          .select()
+          .gte('created_at', startIso)
+          .lte('created_at', endIso)
+          .order('created_at', ascending: true);
+
+      if (mounted) {
+        setState(() {
+          _rawSensorData = List<Map<String, dynamic>>.from(response);
+          _isLoadingData = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching sensor historical data: $e");
+      if (mounted) setState(() => _isLoadingData = false);
+    }
+  }
+
+  // Live real-time stream listener for incoming sensor packets
+  void _setupDataStream() {
+    _dataStreamSub = Supabase.instance.client
+        .from('sweet_potato_leave_data')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: true)
+        .listen((records) {
+      if (mounted && records.isNotEmpty) {
+        final start = _getStartDate();
+        final end = _getEndDate();
+        
+        final filtered = records.where((row) {
+          final rowTime = DateTime.tryParse(row['created_at']?.toString() ?? '');
+          if (rowTime == null) return false;
+          return rowTime.isAfter(start) && rowTime.isBefore(end);
+        }).toList();
+
+        setState(() {
+          _rawSensorData = filtered;
+        });
+      }
+    });
   }
 
   void _toggleAll(bool? value) {
-    if (value == null || !_isDataActive) return; // ⭐ Use _isDataActive
+    if (value == null || !_isDataActive) return;
     setState(() {
       _showLight = value;
       _showHumidity = value;
@@ -92,7 +164,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   Widget _buildDynamicDateMessage() {
-    if (!_isDataActive) { // ⭐ Use _isDataActive
+    if (!_isDataActive) {
       return Text(
         widget.isLoggedIn ? 'Waiting for profile setup.' : 'System offline.', 
         style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)
@@ -115,7 +187,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   List<String> get _activeParams {
-    if (!_isDataActive) return []; // ⭐ Use _isDataActive
+    if (!_isDataActive) return [];
     List<String> active = [];
     if (_showLight) active.add('Light');
     if (_showHumidity) active.add('Humidity');
@@ -125,15 +197,13 @@ class _DataTabState extends State<DataTab> {
     return active;
   }
 
-  List<Color> get _activeColors => _activeParams.map((p) => _paramColors[p]!).toList();
-
   Future<void> _pickDateRange() async {
-    if (!_isDataActive) return; // ⭐ Use _isDataActive
+    if (!_isDataActive) return;
 
     DateTimeRange? pickedRange = await showDateRangePicker(
       context: context,
-      firstDate: DateTime(2020), 
-      lastDate: DateTime.now(),
+      firstDate: DateTime(2025), 
+      lastDate: DateTime.now().add(const Duration(days: 1)),
       initialDateRange: _customDateRange ?? DateTimeRange(
         start: DateTime.now().subtract(const Duration(days: 7)),
         end: DateTime.now(),
@@ -141,12 +211,12 @@ class _DataTabState extends State<DataTab> {
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
-            platform: TargetPlatform.windows, 
             colorScheme: ColorScheme.light(
-              primary: Colors.blue.shade600, 
+              primary: Colors.green.shade700, 
               onPrimary: Colors.white,
               onSurface: const Color(0xFF333333), 
-            ), dialogTheme: DialogThemeData(backgroundColor: Colors.white),
+            ), 
+            dialogTheme: const DialogThemeData(backgroundColor: Colors.white),
           ),
           child: Center(
             child: ConstrainedBox(
@@ -163,6 +233,7 @@ class _DataTabState extends State<DataTab> {
         _customDateRange = pickedRange;
         _selectedDateRange = '${DateFormat('MMM dd').format(pickedRange.start)} - ${DateFormat('MMM dd').format(pickedRange.end)}';
       });
+      _fetchHistoricalData();
     }
   }
 
@@ -181,13 +252,13 @@ class _DataTabState extends State<DataTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeaderSection(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               _buildParametersCard(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               _buildFilterAndExportRow(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               _buildChartCard(),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
               _buildMetricLogTable(),
               const SizedBox(height: 40), 
             ],
@@ -241,14 +312,14 @@ class _DataTabState extends State<DataTab> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: _isDataActive ? () { // ⭐ Use _isDataActive
+          onPressed: _isDataActive ? () {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: const Row(
                   children: [
                     Icon(Icons.check_circle, color: Colors.white),
                     SizedBox(width: 10),
-                    Text('Report exported successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Telemetry logs exported successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
                   ],
                 ),
                 backgroundColor: Colors.green.shade800,
@@ -260,8 +331,8 @@ class _DataTabState extends State<DataTab> {
           style: ElevatedButton.styleFrom(
             backgroundColor: _isDataActive ? const Color(0xFF065F46) : Colors.grey.shade300, 
             foregroundColor: _isDataActive ? Colors.white : Colors.grey.shade500,
-            elevation: _isDataActive ? 4 : 0,
-            shadowColor: const Color(0xFF064E3B).withOpacity(0.5),
+            elevation: _isDataActive ? 3 : 0,
+            shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           ),
@@ -281,6 +352,7 @@ class _DataTabState extends State<DataTab> {
             _customDateRange = null; 
           }
         });
+        _fetchHistoricalData();
       } : null,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), 
@@ -314,7 +386,7 @@ class _DataTabState extends State<DataTab> {
 
   Widget _buildParametersCard() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -350,7 +422,7 @@ class _DataTabState extends State<DataTab> {
               )
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           _buildCheckboxRow('Light', _showLight, (val) => setState(() => _showLight = val!)),
           _buildCheckboxRow('Humidity', _showHumidity, (val) => setState(() => _showHumidity = val!)),
           _buildCheckboxRow('pH Value', _showPh, (val) => setState(() => _showPh = val!)),
@@ -366,7 +438,7 @@ class _DataTabState extends State<DataTab> {
       onTap: _isDataActive ? () => onChanged(!value) : null,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12.0), 
+        padding: const EdgeInsets.symmetric(vertical: 8.0), 
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -407,7 +479,7 @@ class _DataTabState extends State<DataTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('Sensor Overlays', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade600)),
-                  Text('Aggregated telemetry over time', style: TextStyle(fontSize: 12, color: _isDataActive ? Colors.green.shade800.withOpacity(0.7) : Colors.grey.shade500)),
+                  Text('Aggregated live telemetry from ESP32', style: TextStyle(fontSize: 12, color: _isDataActive ? Colors.green.shade800.withOpacity(0.7) : Colors.grey.shade500)),
                 ],
               ),
             ],
@@ -417,14 +489,22 @@ class _DataTabState extends State<DataTab> {
             width: double.infinity,
             child: _buildDynamicLegend(),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 28),
           
           SizedBox(
             height: 180,
             width: double.infinity,
-            child: CustomPaint(
-              painter: MockChartPainter(activeColors: _activeColors),
-            ),
+            child: _isLoadingData 
+              ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
+              : (_rawSensorData.isEmpty 
+                  ? Center(child: Text('No telemetry points found for this range.', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))
+                  : CustomPaint(
+                      painter: RealChartPainter(
+                        sensorData: _rawSensorData,
+                        activeParams: _activeParams,
+                        paramColors: _paramColors,
+                      ),
+                    )),
           ),
           
           Padding(
@@ -435,7 +515,7 @@ class _DataTabState extends State<DataTab> {
             ),
           ),
           
-          const SizedBox(height: 32),
+          const SizedBox(height: 24),
           
           Container(
             padding: const EdgeInsets.all(16),
@@ -524,8 +604,22 @@ class _DataTabState extends State<DataTab> {
   }
 
   List<Widget> _getDynamicXAxis() {
-    if (!_isDataActive) {
+    if (!_isDataActive || _rawSensorData.isEmpty) {
       return ['--', '--', '--', '--'].map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))).toList();
+    }
+
+    if (_rawSensorData.length >= 4) {
+      DateTime first = DateTime.parse(_rawSensorData.first['created_at']);
+      DateTime last = DateTime.parse(_rawSensorData.last['created_at']);
+      Duration diff = last.difference(first);
+
+      DateTime p2 = first.add(Duration(milliseconds: (diff.inMilliseconds * 0.33).round()));
+      DateTime p3 = first.add(Duration(milliseconds: (diff.inMilliseconds * 0.66).round()));
+
+      final fmt = DateFormat('MM/dd');
+      return [fmt.format(first), fmt.format(p2), fmt.format(p3), fmt.format(last)]
+          .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
+          .toList();
     }
 
     List<String> labels;
@@ -545,87 +639,109 @@ class _DataTabState extends State<DataTab> {
         ? "Please complete your profile setup in Settings to view AI insights." 
         : "System offline. Please log in to view historical data and AI insights.";
     }
+    if (_rawSensorData.isEmpty) {
+      return "No telemetry logged yet for this period. AI will provide insights once the ESP32 uploads data.";
+    }
     if (_activeParams.isEmpty) return "Select parameters above to generate AI analysis.";
     
-    if (_activeParams.contains('Humidity') && _activeParams.contains('Temperature')) {
-      return "High correlation detected between Temperature and Humidity over $_selectedDateRange. Recommend increasing ventilation during peak heat hours to prevent mold.";
+    // Evaluate the latest sensor metrics
+    final latest = _rawSensorData.last;
+    final temp = (latest['temperature'] as num?)?.toDouble() ?? 25.0;
+    final humid = (latest['humidity'] as num?)?.toDouble() ?? 75.0;
+    final moist = (latest['soil_moisture'] as num?)?.toInt() ?? 80;
+
+    if (temp > 28.0 && humid > 80.0) {
+      return "High temperature (${temp.toStringAsFixed(1)}°C) and humidity (${humid.toStringAsFixed(0)}%) detected. Ventilation active to support sweet potato leaf transpiration.";
     }
-    if (_activeParams.contains('pH Value')) {
-      return "pH levels showed slight fluctuations during $_selectedDateRange. Nutrient absorption remains optimal, but monitor dosing system closely.";
+    if (moist < 70) {
+      return "Soil moisture dropped below target (${moist}%). Smart irrigation burst will cycle to maintain 80% optimal moisture.";
     }
-    return "Trends for ${_activeParams.join(', ')} appear stable across the $_selectedDateRange period. No critical anomalies detected.";
+    return "Microclimate is well-balanced for sweet potato vegetative growth. Sensors report steady conditions within optimal zones.";
   }
 
+  // Deconstruct real database records into row entries for each metric
   List<Map<String, dynamic>> _getFilteredLogs() {
-    // ⭐ Show Grey/No Data if offline OR if it's a new unconfigured account
-    if (!_isDataActive) {
-      return [{
-        'date': '--', 'time': '--', 'id': '--', 'param': '--', 'val': '--', 'status': 'No Data',
-        'cBg': Colors.grey.shade200, 'cTxt': Colors.grey.shade600, 'cDot': Colors.grey.shade500
-      }];
+    if (!_isDataActive || _rawSensorData.isEmpty) {
+      return [];
     }
 
-    DateTime now = DateTime.now();
-    DateTime start;
-    DateTime end;
-    
-    if (_customDateRange != null) {
-      start = _customDateRange!.start;
-      end = DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
-    } else if (_selectedDateRange == 'Last 7 Days') {
-      start = now.subtract(const Duration(days: 7));
-      end = now;
-    } else {
-      start = now.subtract(const Duration(days: 30));
-      end = now;
-    }
+    List<String> targetParams = _showAllLogSensors ? _paramColors.keys.toList() : _activeParams;
+    if (targetParams.isEmpty) return [];
 
-    List<String> paramsToGenerate = _showAllLogSensors ? _paramColors.keys.toList() : _activeParams;
-    if (paramsToGenerate.isEmpty) return [];
+    List<Map<String, dynamic>> logList = [];
     
-    List<Map<String, dynamic>> generatedLogs = [];
-    int totalMinutes = end.difference(start).inMinutes;
-    if (totalMinutes <= 0) totalMinutes = 1440;
-    
-    for (int i = 0; i < 6; i++) {
-      int minutesToSubtract = (i * (totalMinutes / 5)).round();
-      DateTime logDate = end.subtract(Duration(minutes: minutesToSubtract));
-      
-      String param = paramsToGenerate[i % paramsToGenerate.length];
-      
-      String val = '0';
-      String status = 'Healthy';
-      Color cBg = Colors.green.shade100;
-      Color cTxt = Colors.green.shade800;
-      Color cDot = Colors.green.shade600;
+    // Reverse order so newest records are at the top
+    final reversed = _rawSensorData.reversed.toList();
 
-      if (param == 'Humidity') { 
-        val = '62.4%';
-      } else if (param == 'Soil Moisture') { 
-        val = '18.2%'; status = 'Stable';
-        cBg = const Color(0xFF064E3B); cTxt = Colors.white; cDot = Colors.greenAccent.shade400;
-      } else if (param == 'Temperature') { 
-        val = '26.5°C';
-      } else if (param == 'Light') { 
-        val = '1.2k Lux'; status = 'Warning';
-        cBg = Colors.orange.shade100; cTxt = Colors.orange.shade900; cDot = Colors.orange; 
-      } else if (param == 'pH Value') { 
-        val = '6.8';
+    for (var row in reversed) {
+      DateTime dt = DateTime.tryParse(row['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+      String dateStr = DateFormat('MMM dd, yyyy').format(dt);
+      String timeStr = DateFormat('HH:mm').format(dt);
+
+      if (targetParams.contains('Humidity') && row['humidity'] != null) {
+        double val = (row['humidity'] as num).toDouble();
+        bool isOpt = val >= 70 && val <= 90;
+        logList.add({
+          'date': dateStr, 'time': timeStr, 'param': 'Humidity', 'val': '${val.toStringAsFixed(1)}%',
+          'status': isOpt ? 'Optimal' : (val > 90 ? 'High' : 'Low'),
+          'cBg': isOpt ? Colors.green.shade100 : Colors.orange.shade100,
+          'cTxt': isOpt ? Colors.green.shade900 : Colors.orange.shade900,
+          'cDot': isOpt ? Colors.green.shade600 : Colors.orange.shade600,
+        });
       }
 
-      generatedLogs.add({
-        'date': DateFormat('MMM dd, yyyy').format(logDate),
-        'time': DateFormat('HH:mm').format(logDate),
-        'id': 'SN-882${i+1}',
-        'param': param,
-        'val': val,
-        'status': status,
-        'cBg': cBg,
-        'cTxt': cTxt,
-        'cDot': cDot
-      });
+      if (targetParams.contains('Soil Moisture') && row['soil_moisture'] != null) {
+        int val = (row['soil_moisture'] as num).toInt();
+        bool isOpt = val >= 70 && val <= 90;
+        logList.add({
+          'date': dateStr, 'time': timeStr, 'param': 'Soil Moisture', 'val': '$val%',
+          'status': isOpt ? 'Optimal' : (val < 50 ? 'Dry' : 'Warning'),
+          'cBg': isOpt ? Colors.green.shade100 : Colors.orange.shade100,
+          'cTxt': isOpt ? Colors.green.shade900 : Colors.orange.shade900,
+          'cDot': isOpt ? Colors.green.shade600 : Colors.orange.shade600,
+        });
+      }
+
+      if (targetParams.contains('Temperature') && row['temperature'] != null) {
+        double val = (row['temperature'] as num).toDouble();
+        bool isOpt = val >= 22 && val <= 28;
+        logList.add({
+          'date': dateStr, 'time': timeStr, 'param': 'Temperature', 'val': '${val.toStringAsFixed(1)}°C',
+          'status': isOpt ? 'Optimal' : (val > 28 ? 'Warm' : 'Cool'),
+          'cBg': isOpt ? Colors.green.shade100 : Colors.orange.shade100,
+          'cTxt': isOpt ? Colors.green.shade900 : Colors.orange.shade900,
+          'cDot': isOpt ? Colors.green.shade600 : Colors.orange.shade600,
+        });
+      }
+
+      if (targetParams.contains('Light') && row['light'] != null) {
+        int val = (row['light'] as num).toInt();
+        logList.add({
+          'date': dateStr, 'time': timeStr, 'param': 'Light', 'val': '$val Lux',
+          'status': 'Optimal',
+          'cBg': Colors.green.shade100,
+          'cTxt': Colors.green.shade900,
+          'cDot': Colors.green.shade600,
+        });
+      }
+
+      if (targetParams.contains('pH Value') && row['ph_value'] != null) {
+        double val = (row['ph_value'] as num).toDouble();
+        bool isOpt = val >= 5.8 && val <= 7.2;
+        logList.add({
+          'date': dateStr, 'time': timeStr, 'param': 'pH Value', 'val': val.toStringAsFixed(2),
+          'status': isOpt ? 'Optimal' : 'Warning',
+          'cBg': isOpt ? Colors.green.shade100 : Colors.purple.shade100,
+          'cTxt': isOpt ? Colors.green.shade900 : Colors.purple.shade900,
+          'cDot': isOpt ? Colors.green.shade600 : Colors.purple.shade600,
+        });
+      }
+
+      // Keep table snappy by limiting to recent records
+      if (logList.length >= 40) break;
     }
-    return generatedLogs;
+
+    return logList;
   }
 
   Widget _buildMetricLogTable() {
@@ -641,7 +757,7 @@ class _DataTabState extends State<DataTab> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: const EdgeInsets.all(20.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -680,7 +796,7 @@ class _DataTabState extends State<DataTab> {
           ),
           
           Padding(
-            padding: const EdgeInsets.only(bottom: 12.0, left: 24.0),
+            padding: const EdgeInsets.only(bottom: 12.0, left: 20.0),
             child: Align(
               alignment: Alignment.centerLeft,
               child: _buildDynamicDateMessage(),
@@ -688,7 +804,6 @@ class _DataTabState extends State<DataTab> {
           ),
           const Divider(height: 1, color: Color(0xFFE8F5E9)), 
           
-          // ⭐ Magic Scrollbar Nesting
           SizedBox(
             height: 300, 
             width: double.infinity,
@@ -714,21 +829,21 @@ class _DataTabState extends State<DataTab> {
                       padding: const EdgeInsets.only(bottom: 16.0), 
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
-                        dataRowMinHeight: 60,
-                        dataRowMaxHeight: 60,
+                        dataRowMinHeight: 52,
+                        dataRowMaxHeight: 52,
                         dividerThickness: 1,
+                        // Removed SENSOR ID column
                         columns: const [
                           DataColumn(label: Text('DATE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                           DataColumn(label: Text('TIME', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                          DataColumn(label: Text('SENSOR ID', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                           DataColumn(label: Text('PARAMETER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                           DataColumn(label: Text('VALUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                           DataColumn(label: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                         ],
                         rows: filteredLogs.isEmpty 
-                          ? [DataRow(cells: List.generate(6, (index) => DataCell(Text(index == 3 ? 'No Data' : ''))))]
+                          ? [const DataRow(cells: [DataCell(Text('')), DataCell(Text('')), DataCell(Text('No Records Found')), DataCell(Text('')), DataCell(Text(''))])]
                           : filteredLogs.map((log) => _buildDataRow(
-                              log['date'], log['time'], log['id'], log['param'], log['val'], log['status'], log['cBg'], log['cTxt'], log['cDot']
+                              log['date'], log['time'], log['param'], log['val'], log['status'], log['cBg'], log['cTxt'], log['cDot']
                             )).toList(),
                       ),
                     ),
@@ -742,14 +857,13 @@ class _DataTabState extends State<DataTab> {
     );
   }
 
-  DataRow _buildDataRow(String date, String time, String id, String param, String val, String status, Color chipBg, Color chipText, Color dotColor) {
+  DataRow _buildDataRow(String date, String time, String param, String val, String status, Color chipBg, Color chipText, Color dotColor) {
     return DataRow(
       cells: [
-        DataCell(Text(date, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
-        DataCell(Text(time, style: const TextStyle(color: Colors.grey, fontSize: 13, fontWeight: FontWeight.bold))),
-        DataCell(Text(id, style: TextStyle(color: _isDataActive ? Colors.green.shade700 : Colors.grey, fontSize: 13))),
-        DataCell(Text(param, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
-        DataCell(Text(val, style: TextStyle(color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 13))),
+        DataCell(Text(date, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 12))),
+        DataCell(Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))),
+        DataCell(Text(param, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 12))),
+        DataCell(Text(val, style: TextStyle(color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold))),
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -769,10 +883,17 @@ class _DataTabState extends State<DataTab> {
   }
 }
 
-class MockChartPainter extends CustomPainter {
-  final List<Color> activeColors;
+// Maps real normalized data curves
+class RealChartPainter extends CustomPainter {
+  final List<Map<String, dynamic>> sensorData;
+  final List<String> activeParams;
+  final Map<String, Color> paramColors;
 
-  MockChartPainter({required this.activeColors});
+  RealChartPainter({
+    required this.sensorData,
+    required this.activeParams,
+    required this.paramColors,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -785,29 +906,58 @@ class MockChartPainter extends CustomPainter {
     canvas.drawLine(Offset(0, size.height / 2), Offset(size.width, size.height / 2), gridPaint);
     canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), gridPaint);
 
-    for (int i = 0; i < activeColors.length; i++) {
+    if (sensorData.isEmpty || activeParams.isEmpty) return;
+
+    for (var param in activeParams) {
+      final color = paramColors[param] ?? Colors.green;
       final paint = Paint()
-        ..color = activeColors[i].withOpacity(0.8) 
-        ..strokeWidth = 3
+        ..color = color.withOpacity(0.85)
+        ..strokeWidth = 2.5
         ..style = PaintingStyle.stroke
         ..strokeCap = StrokeCap.round;
 
       final path = Path();
-      double startY = size.height * (0.8 - (i * 0.15)).clamp(0.1, 0.9);
-      double cp1Y = size.height * (0.2 + (i * 0.1)).clamp(0.1, 0.9);
-      double cp2Y = size.height * (0.9 - (i * 0.2)).clamp(0.1, 0.9);
-      double endY = size.height * (0.5 + (i * 0.1)).clamp(0.1, 0.9);
+      bool firstPoint = true;
 
-      path.moveTo(0, startY);
-      path.quadraticBezierTo(size.width * 0.3, cp1Y, size.width * 0.6, size.height * 0.5);
-      path.quadraticBezierTo(size.width * 0.8, cp2Y, size.width, endY);
-      
+      for (int i = 0; i < sensorData.length; i++) {
+        final row = sensorData[i];
+        double? rawValue;
+
+        if (param == 'Humidity' && row['humidity'] != null) {
+          rawValue = ((row['humidity'] as num).toDouble()).clamp(0.0, 100.0) / 100.0;
+        } else if (param == 'Soil Moisture' && row['soil_moisture'] != null) {
+          rawValue = ((row['soil_moisture'] as num).toDouble()).clamp(0.0, 100.0) / 100.0;
+        } else if (param == 'Temperature' && row['temperature'] != null) {
+          // Normalize 10°C - 45°C
+          rawValue = (((row['temperature'] as num).toDouble() - 10.0) / 35.0).clamp(0.0, 1.0);
+        } else if (param == 'Light' && row['light'] != null) {
+          // Normalize 0 - 4095 ADC
+          rawValue = ((row['light'] as num).toDouble() / 4095.0).clamp(0.0, 1.0);
+        } else if (param == 'pH Value' && row['ph_value'] != null) {
+          // Normalize 0 - 14 pH
+          rawValue = ((row['ph_value'] as num).toDouble() / 14.0).clamp(0.0, 1.0);
+        }
+
+        if (rawValue != null) {
+          double x = sensorData.length == 1 ? size.width / 2 : (i / (sensorData.length - 1)) * size.width;
+          // Canvas coordinates are inverted vertically: 0 is top, height is bottom
+          double y = size.height - (rawValue * (size.height * 0.85) + (size.height * 0.07));
+
+          if (firstPoint) {
+            path.moveTo(x, y);
+            firstPoint = false;
+          } else {
+            path.lineTo(x, y);
+          }
+        }
+      }
+
       canvas.drawPath(path, paint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant MockChartPainter oldDelegate) {
-    return oldDelegate.activeColors != activeColors;
+  bool shouldRepaint(covariant RealChartPainter oldDelegate) {
+    return oldDelegate.sensorData != sensorData || oldDelegate.activeParams != activeParams;
   }
 }
