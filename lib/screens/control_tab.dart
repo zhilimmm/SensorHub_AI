@@ -10,7 +10,6 @@ class ControlsTab extends StatefulWidget {
 }
 
 class _ControlsTabState extends State<ControlsTab> {
-  final ScrollController _scrollController = ScrollController();
   bool _hasProfileData = false;
   bool get _isActive => widget.isLoggedIn && _hasProfileData;
 
@@ -81,8 +80,14 @@ class _ControlsTabState extends State<ControlsTab> {
     });
   }
 
-  // Switches system between AI Auto and Manual Override
+// Switches system between AI Auto and Manual Override
   Future<void> _setAutomationMode(bool isActive) async {
+    // 1. Update the screen instantly
+    setState(() {
+      _automationActive = isActive;
+    });
+    
+    // 2. Update the database in the background
     try {
       await Supabase.instance.client
           .from('device_controls')
@@ -95,13 +100,25 @@ class _ControlsTabState extends State<ControlsTab> {
 
   // Sends the manual command and instantly pauses AI if it was running
   Future<void> _toggleDevice(String deviceColumn, bool turnOn) async {
-    if (_automationActive) {
-      _setAutomationMode(false); // Pause AI when user intervenes
-    }
+    // 1. Update the screen instantly
+    setState(() {
+      _automationActive = false; // Pause AI on screen
+      
+      if (deviceColumn == 'pump_manual_override') {
+        _manualPumpOn = turnOn;
+      } else if (deviceColumn == 'fan_manual_override') {
+        _manualFanOn = turnOn;
+      }
+    });
+
+    // 2. Update the database in the background
     try {
       await Supabase.instance.client
           .from('device_controls')
-          .update({deviceColumn: turnOn})
+          .update({
+            'automation_active': false, // Tell the ESP32 to pause AI!
+            deviceColumn: turnOn        // Tell the ESP32 to flip the switch
+          })
           .eq('id', 1);
     } catch (e) {
       debugPrint("Error updating $deviceColumn: $e");
@@ -109,6 +126,14 @@ class _ControlsTabState extends State<ControlsTab> {
   }
 
   Future<void> _emergencyStopAll() async {
+    // 1. Update the screen instantly
+    setState(() {
+      _automationActive = false;
+      _manualPumpOn = false;
+      _manualFanOn = false;
+    });
+    
+    // 2. Update the database in the background
     try {
       await Supabase.instance.client
           .from('device_controls')
@@ -127,29 +152,27 @@ class _ControlsTabState extends State<ControlsTab> {
   Widget build(BuildContext context) {
     return Container(
       color: const Color(0xFFF5F6F7),
-      child: Scrollbar(
-        controller: _scrollController,
-        thumbVisibility: true,
-        thickness: 6,
-        radius: const Radius.circular(10),
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTopTitles(),
-              if (_isActive) _buildAutomationBanner(),
-              const SizedBox(height: 24),
-              _buildGrid(),
-              const SizedBox(height: 32),
-              _buildStatsRow(),
-              const SizedBox(height: 32),
-              _buildEmergencyStop(), 
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildTopTitles(),
+          if (_isActive) _buildAutomationBanner(),
+          
+          const Spacer(flex: 2), // Dynamically stretches to fill empty space
+          
+          _buildGrid(),
+          
+          const Spacer(flex: 2),
+          
+          _buildStatsRow(),
+          
+          const Spacer(flex: 2),
+          
+          _buildEmergencyStop(), 
+          
+          const Spacer(flex: 1), // Keeps a small gap at the bottom
+        ],
       ),
     );
   }
