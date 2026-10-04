@@ -1,3 +1,4 @@
+import 'dart:async'; 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -24,6 +25,10 @@ class _ControlsTabState extends State<ControlsTab> {
   bool _autoPumpOn = false;
   bool _autoFanOn = false;
 
+  // Stream Trackers to prevent Ghost Widgets
+  StreamSubscription<List<Map<String, dynamic>>>? _controlsSub;
+  StreamSubscription<List<Map<String, dynamic>>>? _sensorSub;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +36,13 @@ class _ControlsTabState extends State<ControlsTab> {
       _checkProfileStatus();
       _setupRealtimeStreams();
     }
+  }
+
+  @override
+  void dispose() {
+    _controlsSub?.cancel();
+    _sensorSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _checkProfileStatus() async {
@@ -49,8 +61,7 @@ class _ControlsTabState extends State<ControlsTab> {
   }
 
   void _setupRealtimeStreams() {
-    // 1. Listen for Mode and Manual Overrides
-    Supabase.instance.client
+    _controlsSub = Supabase.instance.client
         .from('device_controls')
         .stream(primaryKey: ['id'])
         .eq('id', 1)
@@ -64,8 +75,7 @@ class _ControlsTabState extends State<ControlsTab> {
       }
     });
 
-    // 2. Listen for Live Sensor Triggers
-    Supabase.instance.client
+    _sensorSub = Supabase.instance.client
         .from('sweet_potato_leave_data')
         .stream(primaryKey: ['id'])
         .order('created_at', ascending: false)
@@ -80,44 +90,54 @@ class _ControlsTabState extends State<ControlsTab> {
     });
   }
 
-// Switches system between AI Auto and Manual Override
+  // ⭐ THE FIX: Wipes out manual overrides when AI is turned back on
   Future<void> _setAutomationMode(bool isActive) async {
-    // 1. Update the screen instantly
     setState(() {
       _automationActive = isActive;
+      if (isActive) {
+        _manualPumpOn = false;
+        _manualFanOn = false;
+      }
     });
     
-    // 2. Update the database in the background
     try {
-      await Supabase.instance.client
-          .from('device_controls')
-          .update({'automation_active': isActive})
-          .eq('id', 1);
+      if (isActive) {
+        // AI is resuming: Turn auto mode ON, and force all overrides OFF
+        await Supabase.instance.client
+            .from('device_controls')
+            .update({
+              'automation_active': true,
+              'pump_manual_override': false,
+              'fan_manual_override': false
+            })
+            .eq('id', 1);
+      } else {
+        // User taking control: Just pause AI
+        await Supabase.instance.client
+            .from('device_controls')
+            .update({'automation_active': false})
+            .eq('id', 1);
+      }
     } catch (e) {
       debugPrint("Error setting mode: $e");
     }
   }
 
-  // Sends the manual command and instantly pauses AI if it was running
   Future<void> _toggleDevice(String deviceColumn, bool turnOn) async {
-    // 1. Update the screen instantly
     setState(() {
-      _automationActive = false; // Pause AI on screen
-      
+      _automationActive = false; 
       if (deviceColumn == 'pump_manual_override') {
         _manualPumpOn = turnOn;
       } else if (deviceColumn == 'fan_manual_override') {
         _manualFanOn = turnOn;
       }
     });
-
-    // 2. Update the database in the background
     try {
       await Supabase.instance.client
           .from('device_controls')
           .update({
-            'automation_active': false, // Tell the ESP32 to pause AI!
-            deviceColumn: turnOn        // Tell the ESP32 to flip the switch
+            'automation_active': false,
+            deviceColumn: turnOn        
           })
           .eq('id', 1);
     } catch (e) {
@@ -126,14 +146,11 @@ class _ControlsTabState extends State<ControlsTab> {
   }
 
   Future<void> _emergencyStopAll() async {
-    // 1. Update the screen instantly
     setState(() {
       _automationActive = false;
       _manualPumpOn = false;
       _manualFanOn = false;
     });
-    
-    // 2. Update the database in the background
     try {
       await Supabase.instance.client
           .from('device_controls')
@@ -158,20 +175,13 @@ class _ControlsTabState extends State<ControlsTab> {
         children: [
           _buildTopTitles(),
           if (_isActive) _buildAutomationBanner(),
-          
-          const Spacer(flex: 2), // Dynamically stretches to fill empty space
-          
+          const Spacer(flex: 2),
           _buildGrid(),
-          
           const Spacer(flex: 2),
-          
           _buildStatsRow(),
-          
           const Spacer(flex: 2),
-          
           _buildEmergencyStop(), 
-          
-          const Spacer(flex: 1), // Keeps a small gap at the bottom
+          const Spacer(flex: 1),
         ],
       ),
     );
@@ -192,7 +202,6 @@ class _ControlsTabState extends State<ControlsTab> {
     );
   }
 
-  // ⭐ NEW: Banner that shows if AI is running or paused
   Widget _buildAutomationBanner() {
     return Container(
       width: double.infinity, 
@@ -230,7 +239,8 @@ class _ControlsTabState extends State<ControlsTab> {
   Widget _buildGrid() {
     return Row(
       children: [
-        Expanded(child: _buildControlCard('Water Pump', 'Submersible A1', Icons.water_drop, Colors.blue, Colors.blue.shade50, 190, _autoPumpOn, _manualPumpOn, (val) => _toggleDevice('pump_manual_override', val))),
+        // Changed "Submersible A1" to "Main Irrigation"
+        Expanded(child: _buildControlCard('Water Pump', 'Main Irrigation', Icons.water_drop, Colors.blue, Colors.blue.shade50, 190, _autoPumpOn, _manualPumpOn, (val) => _toggleDevice('pump_manual_override', val))),
         const SizedBox(width: 16),
         Expanded(child: _buildControlCard('Vent Fan', 'Main Exhaust', Icons.air, Colors.green, Colors.cyan.shade50, 190, _autoFanOn, _manualFanOn, (val) => _toggleDevice('fan_manual_override', val))),
       ],
@@ -238,7 +248,6 @@ class _ControlsTabState extends State<ControlsTab> {
   }
 
   Widget _buildControlCard(String title, String sub, IconData icon, MaterialColor iconColor, Color bgColor, double height, bool autoState, bool manualState, Function(bool) onChanged) {
-    // If automation is ON, display the live AI state. If OFF, display the forced manual switch state.
     bool displayState = _automationActive ? autoState : manualState;
     String statusText = _automationActive ? (autoState ? "AUTO: ON" : "AUTO: OFF") : (manualState ? "FORCED: ON" : "FORCED: OFF");
     Color statusColor = _automationActive ? (autoState ? const Color(0xFFED8936) : Colors.grey.shade400) : (manualState ? iconColor.shade700 : Colors.grey.shade500);
@@ -270,29 +279,32 @@ class _ControlsTabState extends State<ControlsTab> {
 
   Widget _buildStatsRow() {
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.start, // Aligns cards to the top if text lengths differ
       children: [
-        Expanded(child: _buildStatMicroCard('Power Draw', _isActive ? '1.24 kW/h' : '--', true)),
+        Expanded(child: _buildInfoCard('Pump Output', '1 manual press dispenses 15-20ml over 5 seconds.', Colors.blue)),
         const SizedBox(width: 12),
-        Expanded(child: _buildStatMicroCard('Uptime', _isActive ? '14d 2h' : '--', false)),
+        Expanded(child: _buildInfoCard('Climate Control', 'Three 5V fans regulate system humidity and temp.', Colors.green)),
       ],
     );
   }
 
-  Widget _buildStatMicroCard(String title, String val, bool isPulse) {
+  // Completely redesigned to allow longer multi-line text without overflowing the screen
+  Widget _buildInfoCard(String title, String text, Color dotColor) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(radius: 4, backgroundColor: _isActive ? (isPulse ? Colors.greenAccent.shade700 : Colors.green) : Colors.grey),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              Text(title.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1)),
-              Text(val, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade400)),
+              CircleAvatar(radius: 4, backgroundColor: _isActive ? dotColor : Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1), overflow: TextOverflow.ellipsis)),
             ],
-          )
+          ),
+          const SizedBox(height: 8),
+          Text(text, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade400, height: 1.4)),
         ],
       ),
     );
