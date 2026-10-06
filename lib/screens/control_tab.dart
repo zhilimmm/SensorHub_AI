@@ -124,20 +124,33 @@ class _ControlsTabState extends State<ControlsTab> {
   }
 
   Future<void> _toggleDevice(String deviceColumn, bool turnOn) async {
+    // Check if we are breaking out of Auto mode right now
+    bool isTransitioningFromAuto = _automationActive;
+
     setState(() {
       _automationActive = false; 
+      
+      if (isTransitioningFromAuto) {
+        _manualPumpOn = _autoPumpOn;
+        _manualFanOn = _autoFanOn;
+      }
+
+      // Apply the specific switch you just tapped
       if (deviceColumn == 'pump_manual_override') {
         _manualPumpOn = turnOn;
       } else if (deviceColumn == 'fan_manual_override') {
         _manualFanOn = turnOn;
       }
     });
+
     try {
+      // Push the fully inherited states to Supabase so hardware doesn't drop connections
       await Supabase.instance.client
           .from('device_controls')
           .update({
             'automation_active': false,
-            deviceColumn: turnOn        
+            'pump_manual_override': _manualPumpOn,
+            'fan_manual_override': _manualFanOn        
           })
           .eq('id', 1);
     } catch (e) {
