@@ -120,7 +120,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(
             icon: const Icon(Icons.notifications, color: Color(0xFF064E3B)),
             onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationsScreen()));
+              Navigator.push(context, MaterialPageRoute(builder: (context) => NotificationsScreen(isLoggedIn: _isLoggedIn)));
             },
           ),
           Padding(

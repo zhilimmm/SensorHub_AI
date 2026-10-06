@@ -1,226 +1,310 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class NotificationsScreen extends StatefulWidget {
-  final bool isLoggedIn; // ⭐ Added login tracking
-  const NotificationsScreen({super.key, this.isLoggedIn = true});
+  final bool isLoggedIn;
+  
+  const NotificationsScreen({super.key, required this.isLoggedIn});
 
   @override
   State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  String _selectedZone = 'All Zones'; 
-  final List<String> _zones = [
-    'Zone A: Seeding Chamber',  
-    'Zone B: Harvest Ready Bay', 
-    'Zone C: Idle', 
-    'All Zones'
-  ];
-
-  bool _hasProfileData = false;
-  bool get _isActive => widget.isLoggedIn && _hasProfileData;
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _notifications = [];
 
   @override
   void initState() {
     super.initState();
     if (widget.isLoggedIn) {
-      _checkProfileStatus();
+      _fetchHistoricalAlerts();
+    } else {
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _checkProfileStatus() async {
+  Future<void> _fetchHistoricalAlerts() async {
+    setState(() => _isLoading = true);
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) return;
-      final data = await Supabase.instance.client.from('profiles').select('username').eq('id', user.id).maybeSingle();
+      // Pull the last 100 records to scan for historical alerts
+      final response = await Supabase.instance.client
+          .from('sweet_potato_leave_data')
+          .select()
+          .order('created_at', ascending: false)
+          .limit(100);
+
+      List<Map<String, dynamic>> alerts = [];
+
+      for (var row in response) {
+        DateTime dt = DateTime.tryParse(row['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+
+        double? temp = (row['temperature'] as num?)?.toDouble();
+        double? humid = (row['humidity'] as num?)?.toDouble();
+        int? moist = (row['soil_moisture'] as num?)?.toInt();
+
+        // Check for Temperature Alerts
+        if (temp != null && temp > 28.0) {
+          bool isCritical = temp > 32.0;
+          alerts.add({
+            'type': isCritical ? 'CRITICAL' : 'WARNING',
+            'typeColor': isCritical ? const Color(0xFFE53935) : const Color(0xFFF57C00),
+            'bgColor': isCritical ? Colors.red.shade50 : Colors.orange.shade50,
+            'icon': Icons.thermostat,
+            'title': isCritical ? 'Extreme Temperature' : 'High Temperature',
+            'message': 'Environment reached ${temp.toStringAsFixed(1)}°C. Consider activating supplementary ventilation.',
+            'timestamp': dt,
+          });
+        }
+
+        // Check for Humidity Alerts
+        if (humid != null && humid > 90.0) {
+          bool isCritical = humid > 95.0;
+          alerts.add({
+            'type': isCritical ? 'CRITICAL' : 'WARNING',
+            'typeColor': isCritical ? const Color(0xFFE53935) : const Color(0xFFF57C00),
+            'bgColor': isCritical ? Colors.red.shade50 : Colors.orange.shade50,
+            'icon': Icons.cloud_off,
+            'title': isCritical ? 'Severe Humidity' : 'Elevated Humidity',
+            'message': 'Atmospheric humidity exceeded ${humid.toStringAsFixed(0)}%. Ventilation required to prevent fungal growth.',
+            'timestamp': dt,
+          });
+        }
+
+        // Check for Moisture Alerts
+        if (moist != null && (moist < 70 || moist > 95)) {
+          bool isCritical = moist < 50 || moist > 98;
+          bool isDry = moist < 70;
+          alerts.add({
+            'type': isCritical ? 'CRITICAL' : 'WARNING',
+            'typeColor': isCritical ? const Color(0xFFE53935) : const Color(0xFFF57C00),
+            'bgColor': isCritical ? Colors.red.shade50 : Colors.orange.shade50,
+            'icon': Icons.water_drop_outlined,
+            'title': isDry ? 'Extreme Moisture Drop' : 'Waterlogged Soil',
+            'message': isDry
+                ? 'Soil has dropped below $moist%. Immediate irrigation required to prevent root stress.'
+                : 'Soil moisture peaked at $moist%. Automated watering cycles have been suspended.',
+            'timestamp': dt,
+          });
+        }
+      }
+
+      // Sort properly by date just in case
+      alerts.sort((a, b) => (b['timestamp'] as DateTime).compareTo(a['timestamp'] as DateTime));
+
+      // Map dynamic Time Ago strings formatting exactly like the mockup
+      for (var alert in alerts) {
+        alert['timeAgo'] = _getMockupTimeAgo(alert['timestamp']);
+      }
+
       if (mounted) {
         setState(() {
-          _hasProfileData = data != null && data['username'] != null && data['username'].toString().trim().isNotEmpty;
+          _notifications = alerts;
+          _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint("Notifications error: $e");
+      debugPrint('Error fetching notifications: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  String _getMockupTimeAgo(DateTime dateTime) {
+    Duration diff = DateTime.now().difference(dateTime);
+    if (diff.inDays > 1) {
+      return DateFormat('MMM dd').format(dateTime).toUpperCase();
+    } else if (diff.inDays == 1) {
+      return '1 DAY AGO';
+    } else if (diff.inHours > 0) {
+      return '${diff.inHours} ${diff.inHours == 1 ? 'HOUR' : 'HOURS'} AGO';
+    } else if (diff.inMinutes > 0) {
+      return '${diff.inMinutes} MIN AGO';
+    } else {
+      return 'JUST NOW';
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F6F7),
+      backgroundColor: const Color(0xFFF8F9FA), // Slightly off-white background from mockup
       appBar: AppBar(
-        backgroundColor: Colors.white.withOpacity(0.9),
+        backgroundColor: const Color(0xFFF8F9FA),
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF006947)),
-        title: const Text('Notifications', style: TextStyle(color: Color(0xFF022C22), fontWeight: FontWeight.w900)),
-      ),
-      body: _isActive 
-          ? _buildActiveState() 
-          : _buildOfflineState(), // ⭐ Shows the offline message if not active
-    );
-  }
-
-  // ⭐ NEW: The Offline / Unconfigured UI
-  Widget _buildOfflineState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              !widget.isLoggedIn ? Icons.notifications_off : Icons.person_off, 
-              size: 80, 
-              color: Colors.grey.shade400
-            ),
-            const SizedBox(height: 24),
-            Text(
-              !widget.isLoggedIn ? 'System Offline' : 'Profile Incomplete',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.grey.shade700),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              !widget.isLoggedIn 
-                  ? 'Please log in to view your system alerts and notifications.' 
-                  : 'Please complete your profile in Settings to connect your ecosystem.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade500, height: 1.5),
-            ),
-          ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF064E3B)),
+          onPressed: () => Navigator.pop(context),
         ),
+        title: const Text(
+          'Notifications', 
+          style: TextStyle(color: Color(0xFF022C22), fontWeight: FontWeight.w900, fontSize: 20)
+        ),
+        titleSpacing: 0, // Aligns title closely to the back button
       ),
-    );
-  }
-
-  // The Active UI
-  Widget _buildActiveState() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Stay updated with your botanical ecosystem.', style: TextStyle(color: Colors.grey, fontSize: 14)),
-          const SizedBox(height: 16),
-          
-          _buildZoneDropdown(),
-          const SizedBox(height: 24),
-
-          ..._buildDynamicNotifications(),
-          
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24.0),
-            child: Row(
-              children: [
-                Text('OLDER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2, color: Colors.grey)),
-                Expanded(child: Divider(indent: 16)),
-              ],
-            ),
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 20),
+                child: Text(
+                  'Stay updated with your botanical ecosystem.', 
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500)
+                ),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  color: const Color(0xFF047857),
+                  onRefresh: _fetchHistoricalAlerts,
+                  child: _buildNotificationsList(),
+                ),
+              ),
+            ],
           ),
+    );
+  }
+
+  Widget _buildNotificationsList() {
+    if (!widget.isLoggedIn) {
+      return _buildEmptyState(Icons.cloud_off, 'System offline', 'Please log in to view alert history.');
+    }
+
+    if (_notifications.isEmpty) {
+      return _buildEmptyState(Icons.check_circle_outline, 'All Clear', 'No environmental alerts recorded recently.');
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: _notifications.length,
+      itemBuilder: (context, index) {
+        final alert = _notifications[index];
+        
+        // Logic to inject the "OLDER" divider
+        bool showOlderDivider = false;
+        if (index > 0) {
+          final currentAlert = _notifications[index];
+          final prevAlert = _notifications[index - 1];
+          bool isCurrentOlder = DateTime.now().difference(currentAlert['timestamp']).inDays > 1;
+          bool isPrevOlder = DateTime.now().difference(prevAlert['timestamp']).inDays > 1;
           
-          Opacity(
-            opacity: 0.5,
-            child: _buildNotifCard(Icons.lock, Colors.grey, 'Security', 'OCT 24', 'Credentials Updated', 'Two-factor authentication has been successfully enabled.'),
-          )
-        ],
-      ),
-    );
-  }
+          if (isCurrentOlder && !isPrevOlder) {
+            showOlderDivider = true;
+          }
+        }
 
-  Widget _buildZoneDropdown() {
-    return Container(
-      width: double.infinity, 
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2), 
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))],
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          isExpanded: true, 
-          value: _selectedZone,
-          icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600), 
-          items: _zones.map((String value) {
-            return DropdownMenuItem<String>(
-              value: value,
-              child: Text(value, style: const TextStyle(color: Color(0xFF022C22), fontWeight: FontWeight.bold, fontSize: 14)), 
-            );
-          }).toList(),
-          onChanged: (String? newValue) {
-            if (newValue != null) {
-              setState(() { _selectedZone = newValue; });
-            }
-          }, 
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildDynamicNotifications() {
-    List<Widget> notifications = [];
-
-    if (_selectedZone.contains('Zone A') || _selectedZone == 'All Zones') {
-      notifications.addAll([
-        _buildNotifCard(Icons.warning_amber_rounded, Colors.red, 'Critical', '2 MIN AGO', '(Zone A) Extreme Moisture Drop', 'Tray 4 has dropped below 15%. Immediate irrigation required to prevent root stress.'),
-        const SizedBox(height: 12),
-        _buildNotifCard(Icons.thermostat, Colors.orange, 'Warning', '1 HOUR AGO', '(Zone A) High Temperature', 'Greenhouse A is reaching 29°C. Consider activating supplementary ventilation.'),
-        const SizedBox(height: 12),
-      ]);
-    }
-
-    if (_selectedZone.contains('Zone B') || _selectedZone == 'All Zones') {
-      notifications.addAll([
-        _buildNotifCard(Icons.cloud_off, Colors.red, 'Critical', '15 MIN AGO', '(Zone B) CO2 Depletion', 'Atmospheric CO2 fell below 400ppm during peak photosynthesis phase.'),
-        const SizedBox(height: 12),
-        _buildNotifCard(Icons.eco, Colors.green, 'Ready', '2 HOURS AGO', '(Zone B) Peak Ripeness', 'Visual AI and sensors indicate optimal sugar brix levels. Ready for harvest.'),
-        const SizedBox(height: 12),
-      ]);
-    }
-
-    if (_selectedZone.contains('Zone C') || _selectedZone == 'All Zones') {
-      notifications.addAll([
-        _buildNotifCard(Icons.notifications_paused, Colors.grey, 'Status', '1 DAY AGO', '(Zone C) Idle State', 'Zone C is currently inactive. Actuators powered down to save energy.'),
-        const SizedBox(height: 12),
-      ]);
-    }
-
-    if (_selectedZone == 'All Zones') {
-      notifications.addAll([
-        _buildNotifCard(Icons.system_update_alt, Colors.blue, 'Update', '4 HOURS AGO', 'AI Optimization v2.4', 'Improved predictive watering algorithm for tropical species applied to all zones.'),
-        const SizedBox(height: 12),
-      ]);
-    }
-
-    return notifications;
-  }
-
-  Widget _buildNotifCard(IconData icon, MaterialColor color, String tag, String time, String title, String desc) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)]),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color.shade50, shape: BoxShape.circle), child: Icon(icon, color: color.shade700)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Widget card = Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16), 
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.02), 
+                blurRadius: 10, 
+                offset: const Offset(0, 4)
+              )
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: alert['bgColor'],
+                child: Icon(alert['icon'], color: alert['typeColor'], size: 22),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(tag.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1, color: color.shade700)),
-                    Text(time, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey.shade400)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          alert['type'], 
+                          style: TextStyle(
+                            color: alert['typeColor'], 
+                            fontSize: 9, 
+                            fontWeight: FontWeight.w900, 
+                            letterSpacing: 1.5
+                          )
+                        ),
+                        Text(
+                          alert['timeAgo'], 
+                          style: TextStyle(
+                            color: Colors.grey.shade400, 
+                            fontSize: 9, 
+                            fontWeight: FontWeight.w800, 
+                            letterSpacing: 0.5
+                          )
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      alert['title'], 
+                      style: const TextStyle(
+                        color: Color(0xFF222222), 
+                        fontWeight: FontWeight.bold, 
+                        fontSize: 15
+                      )
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      alert['message'], 
+                      style: TextStyle(
+                        color: Colors.grey.shade600, 
+                        fontSize: 12.5, 
+                        fontWeight: FontWeight.w500,
+                        height: 1.4
+                      )
+                    ),
                   ],
                 ),
-                const SizedBox(height: 4),
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF2C2F30))),
-                const SizedBox(height: 4),
-                Text(desc, style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4)),
-              ],
-            ),
-          )
+              ),
+            ],
+          ),
+        );
+
+        if (showOlderDivider) {
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                child: Row(
+                  children: [
+                    Text('OLDER', style: TextStyle(color: Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                    const SizedBox(width: 12),
+                    Expanded(child: Divider(color: Colors.grey.shade300, thickness: 1)),
+                  ],
+                ),
+              ),
+              card,
+            ],
+          );
+        }
+
+        return card;
+      },
+    );
+  }
+
+  Widget _buildEmptyState(IconData icon, String title, String subtitle) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 80, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Color(0xFF022C22))),
+          const SizedBox(height: 8),
+          Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey.shade600, fontWeight: FontWeight.w500)),
         ],
       ),
     );
