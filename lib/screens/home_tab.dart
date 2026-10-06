@@ -480,9 +480,9 @@ class _HomeTabState extends State<HomeTab> {
     // Target: ~80%
     String getMoistStatus(int? moist) {
       if (moist == null) return 'idle';
-      if (moist < 50) return 'danger';
-      if (moist < 70) return 'warning';
-      return 'optimal';
+      if (moist < 50 || moist > 95) return 'danger'; // Too dry OR waterlogged
+      if (moist < 70 || moist > 90) return 'warning'; // Slightly off-target
+      return 'optimal'; // 70% to 90% is optimal
     }
 
     // Target: 22°C - 28°C
@@ -661,7 +661,26 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  Widget _buildActiveAlertsWidget(bool isActive) {
+Widget _buildActiveAlertsWidget(bool isActive) {
+    List<Widget> alertRows = [];
+
+    // Dynamically generate alerts based on live sensor data
+    if (isActive && !_isLoadingTelemetry) {
+      if (_liveHumidity != null && _liveHumidity! > 90) {
+        alertRows.add(_buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, 'Humidity exceeds 90%', 'Smart Planter', 'Just now'));
+        alertRows.add(const SizedBox(height: 12));
+      }
+      if (_liveTemp != null && _liveTemp! > 28) {
+        alertRows.add(_buildNewAlertRow(Icons.thermostat, Colors.orange.shade600, 'Temperature high (${_liveTemp!.toStringAsFixed(1)}°C)', 'Climate Control', 'Just now'));
+        alertRows.add(const SizedBox(height: 12));
+      }
+      if (_liveMoisture != null && (_liveMoisture! < 70 || _liveMoisture! > 95)) {
+        String msg = _liveMoisture! < 70 ? 'Soil moisture low' : 'Soil waterlogged';
+        alertRows.add(_buildNewAlertRow(Icons.eco, Colors.brown.shade500, '$msg (${_liveMoisture}%)', 'Root Zone', 'Just now'));
+        alertRows.add(const SizedBox(height: 12));
+      }
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -671,10 +690,7 @@ class _HomeTabState extends State<HomeTab> {
             const Text('Active Alerts', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
             InkWell(
               onTap: () {
-                Navigator.push(
-                  context, 
-                  MaterialPageRoute(builder: (context) => NotificationsScreen(isLoggedIn: widget.isLoggedIn))
-                );
+                Navigator.push(context, MaterialPageRoute(builder: (context) => NotificationsScreen(isLoggedIn: widget.isLoggedIn)));
               },
               child: Padding(
                 padding: const EdgeInsets.all(4.0),
@@ -685,18 +701,35 @@ class _HomeTabState extends State<HomeTab> {
         ),
         const SizedBox(height: 10),
         
-        if (isActive) ...[
-          _buildNewAlertRow(Icons.water_drop, Colors.blue.shade500, 'Humidity exceeds 85%', 'Smart Planter', '5m ago'),
-          const SizedBox(height: 12),
-          _buildNewAlertRow(Icons.lightbulb, Colors.amber.shade600, 'Grow lights active', 'Supplemental lighting', '1h ago'),
-        ] else ...[
-          _buildEmptyStateRow(Icons.notifications_paused, 'No active alerts.'),
-        ]
+        if (isActive && alertRows.isNotEmpty) 
+          ...alertRows
+        else if (isActive && alertRows.isEmpty)
+          _buildEmptyStateRow(Icons.check_circle_outline, 'All parameters optimal.')
+        else 
+          _buildEmptyStateRow(Icons.notifications_paused, 'No active alerts.')
       ],
     );
   }
 
   Widget _buildNextActionsWidget(bool isActive) {
+    List<Widget> actionRows = [];
+
+    // Dynamically prescribe actions based on live sensor data
+    if (isActive && !_isLoadingTelemetry) {
+      if (_liveTemp != null && _liveTemp! > 28) {
+        actionRows.add(_buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, 'Active Exhaust', 'Cooling cycle triggered by high temp'));
+        actionRows.add(const SizedBox(height: 12));
+      } else if (_liveHumidity != null && _liveHumidity! > 90) {
+        actionRows.add(_buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, 'Gentle Ventilation', 'Scheduled exhaust cycle for humidity'));
+        actionRows.add(const SizedBox(height: 12));
+      }
+      
+      if (_liveMoisture != null && _liveMoisture! < 70) {
+        actionRows.add(_buildNewActionRow(Icons.water_drop, Colors.green.shade100, Colors.green.shade800, 'Irrigation Burst', 'Watering cycle required'));
+        actionRows.add(const SizedBox(height: 12));
+      }
+    }
+
     return Column( 
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -706,9 +739,7 @@ class _HomeTabState extends State<HomeTab> {
             const Text('Next Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF333333))),
             InkWell(
               onTap: () {
-                if (widget.onNavigateToAI != null) {
-                  widget.onNavigateToAI!();
-                }              
+                if (widget.onNavigateToAI != null) widget.onNavigateToAI!();
               },
               child: Padding(
                 padding: const EdgeInsets.all(4.0),
@@ -719,13 +750,12 @@ class _HomeTabState extends State<HomeTab> {
         ),
         const SizedBox(height: 10),
         
-        if (isActive) ...[
-          _buildNewActionRow(Icons.air, Colors.blue.shade100, Colors.blue.shade700, 'Gentle Ventilation', 'Scheduled exhaust cycle'),
-          const SizedBox(height: 12),
-          _buildNewActionRow(Icons.eco, Colors.green.shade100, Colors.green.shade800, 'Mist Propagation', 'Misting Cycle'),
-        ] else ...[
-          _buildEmptyStateRow(Icons.event_busy, 'No upcoming actions estimated.'),
-        ]
+        if (isActive && actionRows.isNotEmpty) 
+          ...actionRows
+        else if (isActive && actionRows.isEmpty)
+          _buildEmptyStateRow(Icons.eco_outlined, 'No immediate actions required.')
+        else 
+          _buildEmptyStateRow(Icons.event_busy, 'No upcoming actions estimated.')
       ],
     );
   }
