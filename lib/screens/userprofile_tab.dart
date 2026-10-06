@@ -212,7 +212,7 @@ class _SettingsTabState extends State<SettingsTab> {
                 child: _hasProfileData 
                   ? const CircleAvatar(
                       radius: 50,
-                      backgroundImage: NetworkImage('https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=256&auto=format&fit=crop'), 
+                      backgroundImage: AssetImage('assets/zhilim_pic.jpeg'), 
                     )
                   : CircleAvatar(
                       radius: 50,
