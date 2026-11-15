@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AITab extends StatefulWidget {
@@ -13,14 +15,25 @@ class _AITabState extends State<AITab> {
   final ScrollController _scrollController = ScrollController();
   bool _hasProfileData = false;
   
-  // Returns true only if logged in AND profile is configured
+  // AI State Variables
+  bool _isAnalyzing = false;
+  int _irrCode = 0;
+  String _irrAction = "Loading...";
+  String _irrDesc = "Awaiting Random Forest inference...";
+  int _ventCode = 0;
+  String _ventAction = "Loading...";
+  String _ventDesc = "Awaiting Random Forest inference...";
+
   bool get _isActive => widget.isLoggedIn && _hasProfileData;
 
   @override
   void initState() {
     super.initState();
     if (widget.isLoggedIn) {
-      _checkProfileStatus();
+      _checkProfileStatus().then((_) {
+        // Once profile is confirmed, trigger the AI inference
+        if (_isActive) _runRandomForestInference();
+      });
     }
   }
 
@@ -39,6 +52,65 @@ class _AITabState extends State<AITab> {
     }
   }
 
+  // THE HTTP CALL TO YOUR PYTHON SERVER
+  Future<void> _runRandomForestInference() async {
+    setState(() => _isAnalyzing = true);
+
+    try {
+      // 1. Get latest sensor data
+      final data = await Supabase.instance.client
+          .from('sweet_potato_leave_data')
+          .select('temperature, humidity, soil_moisture')
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
+
+      if (data == null) throw Exception("No sensor data");
+
+      // 2. Send to FastAPI Server (CHANGE THIS IP TO YOUR LAPTOP'S IP)
+      final url = Uri.parse('http://10.0.2.2:8000/api/predict');
+      
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'temperature': (data['temperature'] as num).toDouble(),
+          'humidity': (data['humidity'] as num).toDouble(),
+          'soil_moisture': (data['soil_moisture'] as num).toInt(),
+        }),
+      );
+
+      // 3. Update UI with AI Results
+      if (response.statusCode == 200) {
+        final result = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            _irrCode = result['irrigation_code'];
+            _irrAction = result['irrigation_action'];
+            _irrDesc = result['irrigation_desc'];
+            _ventCode = result['ventilation_code'];
+            _ventAction = result['ventilation_action'];
+            _ventDesc = result['ventilation_desc'];
+            _isAnalyzing = false;
+          });
+        }
+      } else {
+        throw Exception("Server Error");
+      }
+    } catch (e) {
+      debugPrint("AI Error: $e");
+      if (mounted) {
+        setState(() {
+          _irrAction = "Inference Failed";
+          _irrDesc = "Check Python Server Connection";
+          _ventAction = "Inference Failed";
+          _ventDesc = "Check Python Server Connection";
+          _isAnalyzing = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -48,20 +120,25 @@ class _AITabState extends State<AITab> {
         thumbVisibility: true,
         thickness: 6,
         radius: const Radius.circular(10),
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTopTitles(), 
-              _buildHeroCard(), 
-              const SizedBox(height: 32),
-              _buildRecommendationsSection(),
-              const SizedBox(height: 32),
-              _buildBentoAnalysisSection(),
-              const SizedBox(height: 40),
-            ],
+        child: RefreshIndicator(
+          color: const Color(0xFF006947),
+          onRefresh: _runRandomForestInference,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            controller: _scrollController,
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildTopTitles(), 
+                _buildHeroCard(), 
+                const SizedBox(height: 32),
+                _buildRecommendationsSection(),
+                const SizedBox(height: 32),
+                _buildBentoAnalysisSection(),
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
@@ -105,7 +182,7 @@ class _AITabState extends State<AITab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _isActive ? 'Your greenhouse ecosystem is being balanced in real-time. Efficiency is up 18% today.' : 'Please log in and configure your profile to activate AI.', 
+                  _isActive ? 'Your greenhouse ecosystem is being balanced in real-time.' : 'Please log in and configure your profile to activate AI.', 
                   style: TextStyle(color: _isActive ? const Color(0xFF005A3C).withOpacity(0.9) : Colors.grey.shade600, fontSize: 14, height: 1.4)
                 ),
                 const SizedBox(height: 16),
@@ -114,8 +191,8 @@ class _AITabState extends State<AITab> {
                     spacing: 8, 
                     runSpacing: 8, 
                     children: [
-                      _buildPill(Icons.thermostat, 'Optimized'),
-                      _buildPill(Icons.bolt, 'Eco Mode'),
+                      _buildPill(Icons.psychology, 'Random Forest AI'),
+                      _buildPill(Icons.bolt, 'Edge Synced'),
                     ],
                   )
               ],
@@ -158,21 +235,54 @@ class _AITabState extends State<AITab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('AI Recommendations', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade500)),
-                Text('Based on local climate and sensor data', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                Text('Powered by Scikit-Learn', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
               ],
             ),
-            if (_isActive) const Text('View History', style: TextStyle(color: Color(0xFF006947), fontWeight: FontWeight.bold, fontSize: 12)),
           ],
         ),
         const SizedBox(height: 16),
-        Column(
-          children: [
-            _buildRecCard(Icons.water_drop, Colors.blue, 'Status', 'Scheduled', 'Targeted Hydration', 'Soil moisture in Zone B is at 34%. Recommendation: 500ml mist at 4:00 PM.', 'Auto-Watering', true),
-            // ⭐ REMOVED the Grow Lights recommendation card
-            const SizedBox(height: 16),
-            _buildRecCard(Icons.air, Colors.green, 'CO2 Level', 'Optimal', 'Air Circulation', 'Humidity buildup detected in the north corner. Recommendation: Cycle intake fans.', 'Ventilation Sync', false),
-          ],
-        )
+        
+        if (_isAnalyzing && _isActive)
+          Container(
+            height: 150,
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(color: Color(0xFF006947)),
+                  SizedBox(height: 16),
+                  Text("Running AI Inference...", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+                ],
+              ),
+            ),
+          )
+        else
+          Column(
+            children: [
+              _buildRecCard(
+                Icons.water_drop, 
+                Colors.blue, 
+                'Irrigation', 
+                _irrCode == 1 ? 'Action Needed' : 'Optimal', 
+                _irrAction, 
+                _irrDesc, 
+                'Auto-Watering', 
+                _irrCode == 1
+              ),
+              const SizedBox(height: 16),
+              _buildRecCard(
+                Icons.air, 
+                Colors.green, 
+                'Ventilation', 
+                _ventCode == 1 ? 'Action Needed' : 'Optimal', 
+                _ventAction, 
+                _ventDesc, 
+                'Ventilation Sync', 
+                _ventCode == 1
+              ),
+            ],
+          )
       ],
     );
   }
