@@ -21,8 +21,9 @@ class _HomeTabState extends State<HomeTab> {
   String _fetchedLocation = 'Loading...'; 
   bool _hasProfileData = false;
 
-  // Synced Health Score from ai_insights
+  // Synced Health Score & Growth Forecast from ai_insights
   int _healthIndex = 100;
+  String _growthForecast = 'Loading growth timeline...';
 
   // Live telemetry values from physical sensors
   double? _liveTemp;
@@ -143,17 +144,18 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
-  // Fetches and listens to the AI Health Index in real time
+  // Fetches and listens to the AI Health Index & Growth Forecast in real time
   void _setupHealthScoreStream() {
     Supabase.instance.client
         .from('ai_insights')
-        .select('health_index')
+        .select('health_index, growth_forecast')
         .eq('id', 1)
         .maybeSingle()
         .then((data) {
       if (mounted && data != null) {
         setState(() {
           _healthIndex = data['health_index'] ?? 100;
+          _growthForecast = data['growth_forecast'] ?? 'Syncing growth forecast...';
         });
       }
     }).catchError((e) {
@@ -168,6 +170,7 @@ class _HomeTabState extends State<HomeTab> {
       if (mounted && records.isNotEmpty) {
         setState(() {
           _healthIndex = records.first['health_index'] ?? 100;
+          _growthForecast = records.first['growth_forecast'] ?? 'Syncing growth forecast...';
         });
       }
     });
@@ -482,51 +485,79 @@ class _HomeTabState extends State<HomeTab> {
     Color mainBgColor = isActive ? scenario['bgColor'] : Colors.grey.shade200; 
     Color primaryTextColor = isActive ? scenario['primaryColor'] : Colors.grey.shade700;
     Color progressFillColor = isActive ? scenario['progressColor'] : Colors.grey.shade500; 
-    Color progressTrackColor = isActive ? Colors.white.withOpacity(0.6) : Colors.grey.shade300; 
+    Color progressTrackColor = isActive ? Colors.white.withOpacity(0.55) : Colors.grey.shade300; 
 
     return Container(
-      padding: const EdgeInsets.all(16), 
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18), 
       decoration: BoxDecoration(
         color: mainBgColor,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          // Left Side: Larger, thicker progress ring
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                height: 82, 
+                width: 82,
+                child: CircularProgressIndicator(
+                  value: isActive ? (_healthIndex / 100.0) : 0.0, 
+                  backgroundColor: progressTrackColor,
+                  valueColor: AlwaysStoppedAnimation<Color>(progressFillColor),
+                  strokeWidth: 12, 
+                  strokeCap: StrokeCap.round,
+                ),
+              ),
+              Text(
+                isActive ? '$_healthIndex%' : '0%', 
+                style: TextStyle(
+                  fontSize: 20, 
+                  fontWeight: FontWeight.w900, 
+                  color: primaryTextColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 24),
+          // Right Side: Title, Status, and Message
           Expanded( 
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text('HEALTH INDEX', style: TextStyle(color: primaryTextColor.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                const SizedBox(height: 4),
-                Text(isActive ? scenario['label'] : 'Standby', style: TextStyle(color: primaryTextColor, fontSize: 30, fontWeight: FontWeight.w900)),
+                Text(
+                  'Health Index', 
+                  style: TextStyle(
+                    color: primaryTextColor.withOpacity(0.8), 
+                    fontSize: 13, 
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  isActive ? scenario['label'] : 'Standby', 
+                  style: TextStyle(
+                    color: primaryTextColor, 
+                    fontSize: 32, 
+                    fontWeight: FontWeight.w900,
+                    height: 1.1,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                Text(isActive ? scenario['message'] : 'No active crop assigned', style: TextStyle(color: primaryTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
+                Text(
+                  isActive ? scenario['message'] : 'No active crop assigned', 
+                  style: TextStyle(
+                    color: primaryTextColor.withOpacity(0.9), 
+                    fontSize: 13, 
+                    fontWeight: FontWeight.w500,
+                    height: 1.3,
+                  ),
+                ),
               ],
             ),
-          ),
-          const SizedBox(width: 12),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  SizedBox(
-                    height: 70, 
-                    width: 70,
-                    child: CircularProgressIndicator(
-                      value: isActive ? (_healthIndex / 100.0) : 0.0, 
-                      backgroundColor: progressTrackColor,
-                      valueColor: AlwaysStoppedAnimation<Color>(progressFillColor),
-                      strokeWidth: 8, 
-                      strokeCap: StrokeCap.round,
-                    ),
-                  ),
-                  Text(isActive ? '$_healthIndex%' : '0%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: primaryTextColor)),
-                ],
-              ),
-            ],
           ),
         ],
       ),
@@ -918,40 +949,126 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Widget _buildAIPredictionWidget(bool isActive) {
-    String aiMessage = isActive 
-      ? 'Seedling roots established. True leaves expected in 5 days based on current humidity and lux exposure.' 
-      : 'System offline. Please log in and configure your profile to view AI insights.';
+    final parts = _growthForecast.split('|');
+    final bool isStructured = parts.length == 4;
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isActive ? const Color(0xFF022C22) : Colors.grey.shade200, 
-        borderRadius: BorderRadius.circular(24), 
-        border: Border.all(color: isActive ? Colors.green.shade900 : Colors.grey.shade300)
+        color: isActive ? const Color(0xFF022C22) : Colors.grey.shade200,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isActive ? Colors.green.shade900 : Colors.grey.shade300,
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Top Header Row: Title + Day Badge
           Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Icon(Icons.auto_awesome, color: isActive ? Colors.greenAccent : Colors.grey.shade400, size: 16),
-              const SizedBox(width: 8),
-              Text('AI PREDICTION', style: TextStyle(color: isActive ? Colors.greenAccent.shade400 : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+              Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome,
+                    color: isActive ? Colors.greenAccent : Colors.grey.shade400,
+                    size: 16,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AI PREDICTION',
+                    style: TextStyle(
+                      color: isActive ? Colors.greenAccent.shade400 : Colors.grey.shade500,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+              if (isActive && isStructured)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.greenAccent.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    parts[0].toUpperCase(), // e.g., DAY 17
+                    style: TextStyle(
+                      color: Colors.greenAccent.shade400,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(
-            aiMessage,
-            style: TextStyle(color: isActive ? Colors.white : Colors.grey.shade500, fontSize: 15, fontWeight: FontWeight.w600, height: 1.4),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Text('VIEW FULL ANALYSIS', style: TextStyle(color: isActive ? Colors.greenAccent.shade400 : Colors.grey.shade400, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
-              const SizedBox(width: 4),
-              Icon(Icons.arrow_forward, color: isActive ? Colors.greenAccent.shade400 : Colors.grey.shade400, size: 16),
-            ],
-          )
+          const SizedBox(height: 14),
+
+          // Organized Body Content
+          if (!isActive)
+            Text(
+              'System offline. Please log in and configure your profile to view AI insights.',
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            )
+          else if (isStructured) ...[
+            // Growth Stage Title
+            Text(
+              parts[1], // e.g., Vine & Canopy Expansion
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 6),
+            // Harvest Countdown Row
+            Row(
+              children: [
+                Icon(Icons.calendar_today_rounded, color: Colors.greenAccent.shade400, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  parts[2], // e.g., Est. first leaf harvest in 23 days
+                  style: TextStyle(
+                    color: Colors.greenAccent.shade400,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Divider(color: Colors.white.withOpacity(0.12), height: 1),
+            const SizedBox(height: 12),
+            // Advice / Summary Note
+            Text(
+              parts[3], // e.g., Vines are spreading actively. Minor environmental tweaks...
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.85),
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                height: 1.45,
+              ),
+            ),
+          ] else
+            // Fallback for non-delimited strings
+            Text(
+              _growthForecast,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                height: 1.4,
+              ),
+            ),
         ],
       ),
     );
