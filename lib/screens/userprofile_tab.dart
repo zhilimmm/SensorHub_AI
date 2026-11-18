@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart'; 
-import 'login_screen.dart'; // ⭐ Added import
-import '../main.dart'; // ⭐ Added import for DashboardScreen routing
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'login_screen.dart';
+import '../main.dart';
 
 class SettingsTab extends StatefulWidget {
-  final bool isLoggedIn; 
+  final bool isLoggedIn;
   const SettingsTab({super.key, this.isLoggedIn = true});
 
   @override
@@ -13,7 +13,7 @@ class SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends State<SettingsTab> {
   final ScrollController _pageScrollController = ScrollController();
-  
+
   bool _alertsEnabled = true;
   bool _reportsEnabled = true;
   bool _updatesEnabled = false;
@@ -21,7 +21,7 @@ class _SettingsTabState extends State<SettingsTab> {
   bool _isEditingAccount = false;
   bool _isLoading = true;
   final TextEditingController _usernameController = TextEditingController();
-  
+
   bool get _hasProfileData => widget.isLoggedIn && _usernameController.text.trim().isNotEmpty;
 
   String? _selectedCountry;
@@ -34,8 +34,8 @@ class _SettingsTabState extends State<SettingsTab> {
   final List<String> _cityOptions = ['Shah Alam', 'Kapar', 'Klang', 'Subang Jaya', 'Petaling Jaya'];
   final List<String> _languageOptions = ['English', 'Bahasa Melayu', 'Chinese'];
 
-  final Color _bgColor = const Color(0xFFEDF7F0); 
-  final Color _darkGreen = const Color(0xFF0A3B24); 
+  final Color _bgColor = const Color(0xFFEDF7F0);
+  final Color _darkGreen = const Color(0xFF0A3B24);
   final Color _cardColor = Colors.white;
 
   @override
@@ -46,7 +46,7 @@ class _SettingsTabState extends State<SettingsTab> {
     });
 
     if (widget.isLoggedIn) {
-      _getProfile(); 
+      _getProfile();
     }
   }
 
@@ -76,7 +76,7 @@ class _SettingsTabState extends State<SettingsTab> {
         _selectedCity = data['city'] as String?;
         _selectedLanguage = data['language'] as String?;
       } else {
-        _usernameController.text = ''; 
+        _usernameController.text = '';
         _selectedCountry = null;
         _selectedState = null;
         _selectedCity = null;
@@ -112,7 +112,7 @@ class _SettingsTabState extends State<SettingsTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile saved successfully!'), backgroundColor: Colors.green),
         );
-        setState(() => _isEditingAccount = false); 
+        setState(() => _isEditingAccount = false);
       }
     } catch (error) {
       debugPrint('Error saving profile: $error');
@@ -152,15 +152,13 @@ class _SettingsTabState extends State<SettingsTab> {
                   const SizedBox(height: 32),
                   _buildAccountDetails(),
                   const SizedBox(height: 32),
-                  _buildImpactStats(),
-                  const SizedBox(height: 32),
                   _buildNotificationPreferences(),
                   const SizedBox(height: 40),
-                  
-                  // ⭐ Show Logged In Buttons or Offline Buttons
-                  if (widget.isLoggedIn) _buildFooterWithOvalButtons(), 
+
+                  // Show Logged In Buttons or Offline Buttons
+                  if (widget.isLoggedIn) _buildFooterWithOvalButtons(),
                   if (!widget.isLoggedIn) _buildGuestFooter(),
-                  
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -173,19 +171,19 @@ class _SettingsTabState extends State<SettingsTab> {
 
   Widget _buildHeaderSection() {
     return SizedBox(
-      width: double.infinity, 
+      width: double.infinity,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center, 
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             'ACCOUNT MANAGEMENT',
-            textAlign: TextAlign.center, 
+            textAlign: TextAlign.center,
             style: TextStyle(color: widget.isLoggedIn ? const Color(0xFF047857) : Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
           ),
           const SizedBox(height: 4),
           Text(
-            'User Profile & Settings', 
-            textAlign: TextAlign.center, 
+            'User Profile & Settings',
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: widget.isLoggedIn ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1),
           ),
         ],
@@ -209,16 +207,16 @@ class _SettingsTabState extends State<SettingsTab> {
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: _hasProfileData 
-                  ? const CircleAvatar(
-                      radius: 50,
-                      backgroundImage: AssetImage('assets/zhilim_pic.jpeg'), 
-                    )
-                  : CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.grey.shade200, 
-                      child: Icon(Icons.person, size: 70, color: Colors.grey.shade500),
-                    ),
+                child: _hasProfileData
+                    ? const CircleAvatar(
+                        radius: 50,
+                        backgroundImage: AssetImage('assets/zhilim_pic.jpeg'),
+                      )
+                    : CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.grey.shade200,
+                        child: Icon(Icons.person, size: 70, color: Colors.grey.shade500),
+                      ),
               ),
               Container(
                 padding: const EdgeInsets.all(6),
@@ -231,14 +229,14 @@ class _SettingsTabState extends State<SettingsTab> {
         const SizedBox(height: 16),
         Center(
           child: Text(
-            !widget.isLoggedIn 
-              ? 'Guest User' 
-              : (_hasProfileData ? _usernameController.text : defaultName), 
+            !widget.isLoggedIn
+                ? 'Guest User'
+                : (_hasProfileData ? _usernameController.text : defaultName),
             style: TextStyle(
-              color: _hasProfileData ? _darkGreen : Colors.grey.shade400, 
-              fontSize: 22, 
+              color: _hasProfileData ? _darkGreen : Colors.grey.shade400,
+              fontSize: 22,
               fontWeight: FontWeight.w900,
-              fontStyle: _hasProfileData ? FontStyle.normal : FontStyle.italic
+              fontStyle: _hasProfileData ? FontStyle.normal : FontStyle.italic,
             ),
           ),
         ),
@@ -254,29 +252,29 @@ class _SettingsTabState extends State<SettingsTab> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text('Account Details', style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade600, fontSize: 16, fontWeight: FontWeight.bold)),
-            
-            if (widget.isLoggedIn) GestureDetector(
-              onTap: () {
-                if (_isEditingAccount) {
-                  _updateProfile(); 
-                } else {
-                  setState(() => _isEditingAccount = true); 
-                }
-              },
-              child: _isEditingAccount
-                  ? _isLoading 
-                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.green, strokeWidth: 2))
-                      : Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.green.shade200),
-                          ),
-                          child: Text('Done', style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
-                        )
-                  : Icon(Icons.edit, color: Colors.grey.shade600, size: 18),
-            )
+            if (widget.isLoggedIn)
+              GestureDetector(
+                onTap: () {
+                  if (_isEditingAccount) {
+                    _updateProfile();
+                  } else {
+                    setState(() => _isEditingAccount = true);
+                  }
+                },
+                child: _isEditingAccount
+                    ? _isLoading
+                        ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.green, strokeWidth: 2))
+                        : Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.green.shade200),
+                            ),
+                            child: Text('Done', style: TextStyle(color: Colors.green.shade700, fontWeight: FontWeight.bold, fontSize: 12)),
+                          )
+                    : Icon(Icons.edit, color: Colors.grey.shade600, size: 18),
+              )
           ],
         ),
         const SizedBox(height: 12),
@@ -330,7 +328,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       isDense: true,
-                      hintText: 'Enter $label', 
+                      hintText: 'Enter $label',
                       hintStyle: TextStyle(color: Colors.green.shade200),
                       contentPadding: const EdgeInsets.only(bottom: 4),
                       enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.grey.shade300)),
@@ -338,13 +336,13 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   )
                 : Text(
-                    !widget.isLoggedIn 
-                        ? '--' 
+                    !widget.isLoggedIn
+                        ? '--'
                         : (controller.text.trim().isEmpty ? 'Not set' : controller.text),
                     textAlign: TextAlign.right,
                     style: TextStyle(
-                      color: controller.text.trim().isEmpty ? Colors.grey.shade400 : Colors.grey.shade600, 
-                      fontSize: 13, 
+                      color: controller.text.trim().isEmpty ? Colors.grey.shade400 : Colors.grey.shade600,
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
                       fontStyle: controller.text.trim().isEmpty ? FontStyle.italic : FontStyle.normal,
                     ),
@@ -370,7 +368,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     alignment: Alignment.centerRight,
                     child: DropdownButton<String>(
                       value: currentValue,
-                      hint: Text('Select $label', style: TextStyle(color: Colors.green.shade300, fontSize: 13)), 
+                      hint: Text('Select $label', style: TextStyle(color: Colors.green.shade300, fontSize: 13)),
                       isDense: true,
                       icon: Icon(Icons.arrow_drop_down, color: Colors.green.shade700),
                       style: TextStyle(color: Colors.green.shade800, fontSize: 13, fontWeight: FontWeight.w600),
@@ -382,99 +380,18 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   )
                 : Text(
-                    !widget.isLoggedIn 
-                        ? '--' 
+                    !widget.isLoggedIn
+                        ? '--'
                         : (currentValue ?? 'Not set'),
                     textAlign: TextAlign.right,
                     style: TextStyle(
-                      color: currentValue == null ? Colors.grey.shade400 : Colors.grey.shade600, 
-                      fontSize: 13, 
+                      color: currentValue == null ? Colors.grey.shade400 : Colors.grey.shade600,
+                      fontSize: 13,
                       fontWeight: FontWeight.w500,
                       fontStyle: currentValue == null ? FontStyle.italic : FontStyle.normal,
                     ),
                   ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildImpactStats() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Impact Stats', style: TextStyle(color: widget.isLoggedIn ? _darkGreen : Colors.grey.shade600, fontSize: 16, fontWeight: FontWeight.bold)),
-            Text('Last 30 Days', style: TextStyle(color: _hasProfileData ? Colors.green.shade700 : Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildStatCard(Icons.eco, 'CROP YIELD', _hasProfileData ? '+18%' : '--')),
-            const SizedBox(width: 12),
-            Expanded(child: _buildStatCard(Icons.water_drop, 'WATER SAVED', _hasProfileData ? '4.2k L' : '--')),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildStatCard(Icons.bolt, 'ENERGY EFF.', _hasProfileData ? '94%' : '--', iconColor: _hasProfileData ? Colors.orange.shade700 : null)),
-            const SizedBox(width: 12),
-            Expanded(child: _buildStatCard(Icons.co2, 'CO2 REDUCED', _hasProfileData ? '120kg' : '--')),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: _hasProfileData ? const Color(0xFF69FFA8) : Colors.grey.shade200, 
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Icon(Icons.psychology, color: _hasProfileData ? _darkGreen : Colors.grey.shade400, size: 28),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.white.withOpacity(0.6), borderRadius: BorderRadius.circular(12)),
-                    child: Text(_hasProfileData ? 'AI DRIVEN' : 'NO DATA', style: TextStyle(color: _hasProfileData ? _darkGreen : Colors.grey.shade500, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
-                  )
-                ],
-              ),
-              const SizedBox(height: 20),
-              Text('NUTRIENT PRECISION', style: TextStyle(color: _hasProfileData ? _darkGreen.withOpacity(0.7) : Colors.grey.shade500, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
-              const SizedBox(height: 4),
-              Text(_hasProfileData ? '99.8%' : '--', style: TextStyle(color: _hasProfileData ? _darkGreen : Colors.grey.shade500, fontSize: 24, fontWeight: FontWeight.w900)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatCard(IconData icon, String title, String value, {Color? iconColor}) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: _hasProfileData ? (iconColor ?? _darkGreen) : Colors.grey.shade300, size: 24),
-          const SizedBox(height: 20),
-          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
-          const SizedBox(height: 4),
-          Text(value, style: TextStyle(color: _hasProfileData ? _darkGreen : Colors.grey.shade400, fontSize: 20, fontWeight: FontWeight.w900)),
         ],
       ),
     );
@@ -541,7 +458,7 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // ⭐ NEW: Colorful Offline / Guest Settings Footer
+  // Colorful Offline / Guest Settings Footer
   Widget _buildGuestFooter() {
     return Column(
       children: [
@@ -555,7 +472,7 @@ class _SettingsTabState extends State<SettingsTab> {
             icon: const Icon(Icons.login, color: Colors.white, size: 20),
             label: const Text('Login', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF064E3B), 
+              backgroundColor: const Color(0xFF064E3B),
               elevation: 4,
               shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
@@ -573,7 +490,7 @@ class _SettingsTabState extends State<SettingsTab> {
             icon: const Icon(Icons.person_add, color: Colors.white, size: 20),
             label: const Text('Create Account', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2E7D32), 
+              backgroundColor: const Color(0xFF2E7D32),
               elevation: 4,
               shadowColor: const Color(0xFF2E7D32).withOpacity(0.4),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
@@ -584,7 +501,7 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // ⭐ UPDATED: Logged In Settings Footer (Sign Out & Route Logic)
+  // Logged In Settings Footer (Sign Out & Route Logic)
   Widget _buildFooterWithOvalButtons() {
     return Column(
       children: [
@@ -601,10 +518,10 @@ class _SettingsTabState extends State<SettingsTab> {
             icon: Icon(Icons.switch_account, color: _darkGreen, size: 18),
             label: Text('Switch Account', style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold)),
             style: OutlinedButton.styleFrom(
-              backgroundColor: Colors.white, 
-              side: const BorderSide(color: Colors.white, width: 3), 
+              backgroundColor: Colors.white,
+              side: const BorderSide(color: Colors.white, width: 3),
               elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
             ),
           ),
         ),
@@ -617,19 +534,19 @@ class _SettingsTabState extends State<SettingsTab> {
               await Supabase.instance.client.auth.signOut();
               if (mounted) {
                 Navigator.pushAndRemoveUntil(
-                  context, 
+                  context,
                   MaterialPageRoute(builder: (context) => const DashboardScreen()),
-                  (Route<dynamic> route) => false
+                  (Route<dynamic> route) => false,
                 );
               }
             },
-            icon: const Icon(Icons.logout, color: Colors.white, size: 20), 
-            label: const Text('Logout', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)), 
+            icon: const Icon(Icons.logout, color: Colors.white, size: 20),
+            label: const Text('Logout', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFC0392B), 
+              backgroundColor: const Color(0xFFC0392B),
               elevation: 4,
               shadowColor: const Color(0xFFC0392B).withOpacity(0.4),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)), 
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
             ),
           ),
         ),
