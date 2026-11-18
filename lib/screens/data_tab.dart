@@ -455,39 +455,22 @@ class _DataTabState extends State<DataTab> {
   Future<void> _pickDateRange() async {
     if (!_isDataActive) return;
 
-    DateTimeRange? pickedRange = await showDateRangePicker(
+    final DateTimeRange? pickedRange = await showDialog<DateTimeRange>(
       context: context,
-      firstDate: DateTime(2025),
-      lastDate: DateTime.now().add(const Duration(days: 1)),
-      initialDateRange: _customDateRange ??
-          DateTimeRange(
-            start: DateTime.now().subtract(const Duration(days: 7)),
-            end: DateTime.now(),
-          ),
-      builder: (context, child) {
-        return Theme(
-          data: ThemeData.light().copyWith(
-            colorScheme: ColorScheme.light(
-              primary: Colors.green.shade700,
-              onPrimary: Colors.white,
-              onSurface: const Color(0xFF333333),
+      builder: (context) => _CustomDateRangeDialog(
+        initialRange: _customDateRange ??
+            DateTimeRange(
+              start: DateTime.now().subtract(const Duration(days: 7)),
+              end: DateTime.now(),
             ),
-            dialogTheme: const DialogThemeData(backgroundColor: Colors.white),
-          ),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400, maxHeight: 620),
-              child: child!,
-            ),
-          ),
-        );
-      },
+      ),
     );
 
     if (pickedRange != null) {
       setState(() {
         _customDateRange = pickedRange;
-        _selectedDateRange = '${DateFormat('MMM dd').format(pickedRange.start)} - ${DateFormat('MMM dd').format(pickedRange.end)}';
+        _selectedDateRange =
+            '${DateFormat('MMM dd').format(pickedRange.start)} - ${DateFormat('MMM dd').format(pickedRange.end)}';
       });
       _fetchHistoricalData();
     }
@@ -1224,5 +1207,257 @@ class RealChartPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant RealChartPainter oldDelegate) {
     return oldDelegate.sensorData != sensorData || oldDelegate.activeParams != activeParams;
+  }
+}
+
+class _CustomDateRangeDialog extends StatefulWidget {
+  final DateTimeRange initialRange;
+  const _CustomDateRangeDialog({required this.initialRange});
+
+  @override
+  State<_CustomDateRangeDialog> createState() => _CustomDateRangeDialogState();
+}
+
+class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
+  late DateTime _focusedMonth;
+  DateTime? _startDate;
+  DateTime? _endDate;
+
+  final Color _primaryGreen = const Color(0xFF065F46);
+  final Color _softGreen = const Color(0xFFD1FAE5);
+
+  @override
+  void initState() {
+    super.initState();
+    _startDate = _stripTime(widget.initialRange.start);
+    _endDate = _stripTime(widget.initialRange.end);
+    _focusedMonth = DateTime(_endDate!.year, _endDate!.month);
+  }
+
+  DateTime _stripTime(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  bool _isSameDay(DateTime? a, DateTime? b) {
+    if (a == null || b == null) return false;
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  void _onDayTap(DateTime day) {
+    final tapped = _stripTime(day);
+    setState(() {
+      if (_startDate == null || (_startDate != null && _endDate != null)) {
+        _startDate = tapped;
+        _endDate = null;
+      } else if (tapped.isBefore(_startDate!)) {
+        _endDate = _startDate;
+        _startDate = tapped;
+      } else {
+        _endDate = tapped;
+      }
+    });
+  }
+
+  List<DateTime> _buildCalendarDays() {
+    final firstDayOfMonth = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
+    final int leadingDays = firstDayOfMonth.weekday % 7; // Sunday = 0
+    final startGrid = firstDayOfMonth.subtract(Duration(days: leadingDays));
+
+    return List.generate(42, (index) => startGrid.add(Duration(days: index)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final days = _buildCalendarDays();
+    final today = _stripTime(DateTime.now());
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        width: 340,
+        padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.12),
+              blurRadius: 24,
+              offset: const Offset(0, 10),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Month Header with Circular Arrows
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildNavButton(Icons.chevron_left, () {
+                  setState(() {
+                    _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month - 1);
+                  });
+                }),
+                Text(
+                  DateFormat('MMMM yyyy').format(_focusedMonth),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFF022C22),
+                  ),
+                ),
+                _buildNavButton(Icons.chevron_right, () {
+                  setState(() {
+                    _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month + 1);
+                  });
+                }),
+              ],
+            ),
+            const SizedBox(height: 18),
+
+            // Weekday Labels
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: weekDays
+                  .map((w) => SizedBox(
+                        width: 40,
+                        child: Text(
+                          w,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF374151),
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 8),
+            Divider(height: 1, color: Colors.grey.shade200),
+            const SizedBox(height: 10),
+
+            // 6x7 Calendar Grid
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: days.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 7,
+                mainAxisSpacing: 6,
+                childAspectRatio: 1.05,
+              ),
+              itemBuilder: (context, index) {
+                final day = days[index];
+                final isCurrentMonth = day.month == _focusedMonth.month;
+                final isFuture = day.isAfter(today);
+                final isStart = _isSameDay(day, _startDate);
+                final isEnd = _isSameDay(day, _endDate);
+                final isInRange = _startDate != null &&
+                    _endDate != null &&
+                    day.isAfter(_startDate!) &&
+                    day.isBefore(_endDate!);
+                final hasRange = _startDate != null && _endDate != null && !_isSameDay(_startDate, _endDate);
+
+                // Range connector bar
+                BoxDecoration? rangeDecoration;
+                if (isInRange) {
+                  rangeDecoration = BoxDecoration(color: _softGreen);
+                } else if (isStart && hasRange) {
+                  rangeDecoration = BoxDecoration(
+                    color: _softGreen,
+                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                  );
+                } else if (isEnd && hasRange) {
+                  rangeDecoration = BoxDecoration(
+                    color: _softGreen,
+                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                  );
+                }
+
+                return GestureDetector(
+                  onTap: isFuture ? null : () => _onDayTap(day),
+                  child: Container(
+                    decoration: rangeDecoration,
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: (isStart || isEnd)
+                          ? BoxDecoration(color: _primaryGreen, shape: BoxShape.circle)
+                          : null,
+                      child: Text(
+                        '${day.day}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: (isStart || isEnd || isInRange) ? FontWeight.bold : FontWeight.w500,
+                          color: (isStart || isEnd)
+                              ? Colors.white
+                              : (isFuture || !isCurrentMonth)
+                                  ? Colors.grey.shade300
+                                  : const Color(0xFF1F2937),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 14),
+
+            // Compact Action Row
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton(
+                  onPressed: _startDate == null
+                      ? null
+                      : () {
+                          Navigator.pop(
+                            context,
+                            DateTimeRange(
+                              start: _startDate!,
+                              end: _endDate ?? _startDate!,
+                            ),
+                          );
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primaryGreen,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  ),
+                  child: const Text('Apply', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNavButton(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: _primaryGreen,
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: Colors.white, size: 20),
+      ),
+    );
   }
 }
