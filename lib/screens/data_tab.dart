@@ -1,8 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DataTab extends StatefulWidget {
@@ -17,6 +21,7 @@ class _DataTabState extends State<DataTab> {
   final ScrollController _mainScroll = ScrollController();
   final ScrollController _tableVerticalScroll = ScrollController();
   final ScrollController _tableHorizontalScroll = ScrollController();
+  final GlobalKey _chartKey = GlobalKey();
 
   bool _showLight = true;
   bool _showHumidity = true;
@@ -30,6 +35,7 @@ class _DataTabState extends State<DataTab> {
 
   bool _hasProfileData = false;
   bool _isLoadingData = true;
+  bool _isExporting = false;
 
   // Dynamic AI Trend Insight state
   String _aiTrendInsight = 'Analyzing sensor trends...';
@@ -37,7 +43,7 @@ class _DataTabState extends State<DataTab> {
 
   // Real sensor rows stored directly from Supabase
   List _rawSensorData = [];
-  StreamSubscription<List>? _dataStreamSub;
+  StreamSubscription? _dataStreamSub;
 
   bool get _isDataActive => widget.isLoggedIn && _hasProfileData;
 
@@ -177,6 +183,157 @@ class _DataTabState extends State<DataTab> {
           _isAnalyzingTrend = false;
         });
       }
+    }
+  }
+
+  // Exports a PDF report with the selected parameters' chart, AI Insight, and logs
+  Future<void> _exportPdfReport() async {
+    if (!_isDataActive || _rawSensorData.isEmpty || _activeParams.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select at least one parameter with data to export.')),
+      );
+      return;
+    }
+
+    setState(() => _isExporting = true);
+
+    try {
+      // 1. Capture the line chart as a crisp PNG
+      final boundary = _chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      ui.Image? chartImage;
+      if (boundary != null) {
+        chartImage = await boundary.toImage(pixelRatio: 3.0);
+      }
+      final byteData = await chartImage?.toByteData(format: ui.ImageByteFormat.png);
+      final chartBytes = byteData?.buffer.asUint8List();
+
+      // 2. Build the PDF document using ONLY the selected parameters
+      final pdf = pw.Document();
+      final filteredLogs = _getFilteredLogs(forceSelectedOnly: true);
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(24),
+          build: (pw.Context context) {
+            return [
+              // Header
+              pw.Text(
+                'SensorHub AI - Telemetry Report',
+                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                'Date Range: $_selectedDateRange  |  Generated: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+              ),
+              pw.Text(
+                'Selected Parameters: ${_activeParams.join(', ')}',
+                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
+              ),
+              pw.Divider(height: 20),
+
+              // Embedded Line Chart
+              if (chartBytes != null) ...[
+                pw.Text('Sensor Overlay Chart', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 8),
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: PdfColors.grey300),
+                    borderRadius: pw.BorderRadius.circular(8),
+                  ),
+                  child: pw.Image(pw.MemoryImage(chartBytes), fit: pw.BoxFit.contain),
+                ),
+                pw.SizedBox(height: 16),
+              ],
+
+              // AI Insight Box
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(12),
+                decoration: pw.BoxDecoration(
+                  color: PdfColors.green50,
+                  borderRadius: pw.BorderRadius.circular(8),
+                  border: pw.Border.all(color: PdfColors.green200),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text('AI Trend Insight', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+                    pw.SizedBox(height: 4),
+                    pw.Text(_aiTrendInsight, style: const pw.TextStyle(fontSize: 10, color: PdfColors.green900)),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 20),
+
+              // Filtered Telemetry Table
+              pw.Text('Metric Log (Selected Parameters)', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 8),
+              pw.TableHelper.fromTextArray(
+                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: PdfColors.white),
+                headerDecoration: const pw.BoxDecoration(color: PdfColors.green800),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                cellAlignment: pw.Alignment.centerLeft,
+                headers: ['Date', 'Time', 'Parameter', 'Value', 'Status'],
+                data: filteredLogs.map((log) => [
+                  log['date'].toString(),
+                  log['time'].toString(),
+                  log['param'].toString(),
+                  log['val'].toString(),
+                  log['status'].toString(),
+                ]).toList(),
+              ),
+            ];
+          },
+        ),
+      );
+
+      // 3. Get the logged-in user's email and send PDF to FastAPI
+      final userEmail = Supabase.instance.client.auth.currentUser?.email;
+      if (userEmail == null || userEmail.isEmpty) {
+        throw Exception('No registered email found for this account.');
+      }
+
+      final pdfBytes = await pdf.save();
+
+      final pdfBase64 = base64Encode(pdfBytes);
+      final fileName = 'SensorHub_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
+
+      final emailUrl = Uri.parse('http://10.0.2.2:8000/api/email-report');
+      final emailRes = await http.post(
+        emailUrl,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'recipient_email': userEmail,
+          'filename': fileName,
+          'pdf_base64': pdfBase64,
+        }),
+      );
+
+      if (emailRes.statusCode == 200) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Report emailed to $userEmail!'),
+              backgroundColor: Colors.green.shade800,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        throw Exception('Email server error: ${emailRes.body}');
+      }
+    } catch (e) {
+      debugPrint('PDF Export Error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
@@ -411,24 +568,7 @@ class _DataTabState extends State<DataTab> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: _isDataActive
-              ? () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Row(
-                        children: [
-                          Icon(Icons.check_circle, color: Colors.white),
-                          SizedBox(width: 10),
-                          Text('Telemetry logs exported successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      backgroundColor: Colors.green.shade800,
-                      behavior: SnackBarBehavior.floating,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  );
-                }
-              : null,
+          onPressed: (_isDataActive && !_isExporting) ? _exportPdfReport : null,
           style: ElevatedButton.styleFrom(
             backgroundColor: _isDataActive ? const Color(0xFF065F46) : Colors.grey.shade300,
             foregroundColor: _isDataActive ? Colors.white : Colors.grey.shade500,
@@ -437,7 +577,13 @@ class _DataTabState extends State<DataTab> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           ),
-          child: const Text('Export Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          child: _isExporting
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Export Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         )
       ],
     );
@@ -603,31 +749,42 @@ class _DataTabState extends State<DataTab> {
             ],
           ),
           const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            child: _buildDynamicLegend(),
-          ),
-          const SizedBox(height: 28),
-          SizedBox(
-            height: 180,
-            width: double.infinity,
-            child: _isLoadingData
-                ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
-                : (_rawSensorData.isEmpty
-                    ? Center(child: Text('No telemetry points found for this range.', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))
-                    : CustomPaint(
-                        painter: RealChartPainter(
-                          sensorData: _rawSensorData,
-                          activeParams: _activeParams,
-                          paramColors: _paramColors,
-                        ),
-                      )),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(top: 16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: _getDynamicXAxis(),
+          RepaintBoundary(
+            key: _chartKey,
+            child: Container(
+              color: Colors.white,
+              padding: const EdgeInsets.all(8),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    child: _buildDynamicLegend(),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    height: 180,
+                    width: double.infinity,
+                    child: _isLoadingData
+                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
+                        : (_rawSensorData.isEmpty
+                            ? Center(child: Text('No telemetry points found for this range.', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))
+                            : CustomPaint(
+                                painter: RealChartPainter(
+                                  sensorData: _rawSensorData,
+                                  activeParams: _activeParams,
+                                  paramColors: _paramColors,
+                                ),
+                              )),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: _getDynamicXAxis(),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 24),
@@ -760,12 +917,12 @@ class _DataTabState extends State<DataTab> {
   }
 
   // Deconstruct real database records into row entries for each metric
-  List _getFilteredLogs() {
+  List _getFilteredLogs({bool forceSelectedOnly = false}) {
     if (!_isDataActive || _rawSensorData.isEmpty) {
       return [];
     }
 
-    List<String> targetParams = _showAllLogSensors ? _paramColors.keys.toList() : _activeParams;
+    List<String> targetParams = (!forceSelectedOnly && _showAllLogSensors) ? _paramColors.keys.toList() : _activeParams;
     if (targetParams.isEmpty) return [];
 
     List logList = [];
