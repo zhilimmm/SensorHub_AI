@@ -21,6 +21,9 @@ class _HomeTabState extends State<HomeTab> {
   String _fetchedLocation = 'Loading...'; 
   bool _hasProfileData = false;
 
+  // Synced Health Score from ai_insights
+  int _healthIndex = 100;
+
   // Live telemetry values from physical sensors
   double? _liveTemp;
   double? _liveHumidity;
@@ -45,6 +48,7 @@ class _HomeTabState extends State<HomeTab> {
     if (widget.isLoggedIn) {
       _fetchUserProfile();
       _setupSensorStream();
+      _setupHealthScoreStream();
     }
   }
 
@@ -139,6 +143,36 @@ class _HomeTabState extends State<HomeTab> {
     }
   }
 
+  // Fetches and listens to the AI Health Index in real time
+  void _setupHealthScoreStream() {
+    Supabase.instance.client
+        .from('ai_insights')
+        .select('health_index')
+        .eq('id', 1)
+        .maybeSingle()
+        .then((data) {
+      if (mounted && data != null) {
+        setState(() {
+          _healthIndex = data['health_index'] ?? 100;
+        });
+      }
+    }).catchError((e) {
+      debugPrint('HomeTab Health Score Error: $e');
+    });
+
+    Supabase.instance.client
+        .from('ai_insights')
+        .stream(primaryKey: ['id'])
+        .eq('id', 1)
+        .listen((records) {
+      if (mounted && records.isNotEmpty) {
+        setState(() {
+          _healthIndex = records.first['health_index'] ?? 100;
+        });
+      }
+    });
+  }
+
   void _setupSensorStream() {
     Supabase.instance.client
         .from('sweet_potato_leave_data')
@@ -168,7 +202,7 @@ class _HomeTabState extends State<HomeTab> {
         .stream(primaryKey: ['id'])
         .order('id', ascending: false)
         .limit(1)
-        .listen((List<Map<String, dynamic>> records) {
+        .listen((records) {
       if (mounted && records.isNotEmpty) {
         final latest = records.first;
         setState(() {
@@ -228,6 +262,51 @@ class _HomeTabState extends State<HomeTab> {
           _fetchWeather(_fetchedLocation);
         });
       }
+    }
+  }
+
+  // Returns dynamic label, message, and colors for all 5 health score scenarios
+  Map<String, dynamic> _getHealthScenario(int score) {
+    if (score >= 90) {
+      return {
+        'label': 'Excellent',
+        'message': 'Perfect environment for plant growth right now.',
+        'bgColor': const Color(0xFFA1E6A1),
+        'primaryColor': const Color(0xFF064E3B),
+        'progressColor': const Color.fromARGB(255, 62, 154, 109),
+      };
+    } else if (score >= 75) {
+      return {
+        'label': 'Good',
+        'message': 'Some conditions are slightly lowering the health score.',
+        'bgColor': const Color(0xFFC5E8B7),
+        'primaryColor': const Color(0xFF1B5E20),
+        'progressColor': const Color(0xFF2E7D32),
+      };
+    } else if (score >= 55) {
+      return {
+        'label': 'Fair',
+        'message': 'A few conditions need attention. Check the AI tab.',
+        'bgColor': const Color(0xFFFFE082),
+        'primaryColor': const Color(0xFFE65100),
+        'progressColor': const Color(0xFFEF6C00),
+      };
+    } else if (score >= 35) {
+      return {
+        'label': 'Poor',
+        'message': 'Plants are stressed. Action is needed soon.',
+        'bgColor': const Color(0xFFFFCC80),
+        'primaryColor': const Color(0xFFBF360C),
+        'progressColor': const Color(0xFFD84315),
+      };
+    } else {
+      return {
+        'label': 'Critical',
+        'message': 'Dangerous conditions detected! Check controls now.',
+        'bgColor': const Color(0xFFFFAB91),
+        'primaryColor': const Color(0xFFB71C1C),
+        'progressColor': const Color(0xFFC62828),
+      };
     }
   }
 
@@ -355,7 +434,7 @@ class _HomeTabState extends State<HomeTab> {
                             color: _hasProfileData ? _weatherIconColor : Colors.grey.shade400, 
                             size: 40,
                           ),
-                          const SizedBox(width: 35), // Controls the gap between the icon and temperature
+                          const SizedBox(width: 35),
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
@@ -367,9 +446,9 @@ class _HomeTabState extends State<HomeTab> {
                       )
                     ],
                   ),
-                  const SizedBox(height: 4), // Reduced top gap above divider
+                  const SizedBox(height: 4),
                   Divider(color: Colors.white.withOpacity(0.4), thickness: 1.5), 
-                  const SizedBox(height: 4), // Reduced bottom gap below divider
+                  const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -398,10 +477,12 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Widget _buildHealthWidget(bool isActive) {
-    Color mainBgColor = isActive ? const Color(0xFFA1E6A1) : Colors.grey.shade200; 
-    Color darkGreen = isActive ? const Color(0xFF064E3B) : Colors.grey.shade700;
-    Color progressFillColor = isActive ? const Color.fromARGB(255, 62, 154, 109) : Colors.grey.shade500; 
-    Color progressTrackColor = isActive ? const Color(0xFFE8F5E9) : Colors.grey.shade300; 
+    final scenario = _getHealthScenario(_healthIndex);
+
+    Color mainBgColor = isActive ? scenario['bgColor'] : Colors.grey.shade200; 
+    Color primaryTextColor = isActive ? scenario['primaryColor'] : Colors.grey.shade700;
+    Color progressFillColor = isActive ? scenario['progressColor'] : Colors.grey.shade500; 
+    Color progressTrackColor = isActive ? Colors.white.withOpacity(0.6) : Colors.grey.shade300; 
 
     return Container(
       padding: const EdgeInsets.all(16), 
@@ -416,14 +497,15 @@ class _HomeTabState extends State<HomeTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('HEALTH INDEX', style: TextStyle(color: darkGreen.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                Text('HEALTH INDEX', style: TextStyle(color: primaryTextColor.withOpacity(0.7), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1)),
                 const SizedBox(height: 4),
-                Text(isActive ? 'Excellent' : 'Standby', style: TextStyle(color: darkGreen, fontSize: 30, fontWeight: FontWeight.w900)),
+                Text(isActive ? scenario['label'] : 'Standby', style: TextStyle(color: primaryTextColor, fontSize: 30, fontWeight: FontWeight.w900)),
                 const SizedBox(height: 8),
-                Text(isActive ? 'Optimal growth detected' : 'No active crop assigned', style: TextStyle(color: darkGreen, fontSize: 12, fontWeight: FontWeight.w500)),
+                Text(isActive ? scenario['message'] : 'No active crop assigned', style: TextStyle(color: primaryTextColor, fontSize: 12, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
+          const SizedBox(width: 12),
           Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -434,13 +516,14 @@ class _HomeTabState extends State<HomeTab> {
                     height: 70, 
                     width: 70,
                     child: CircularProgressIndicator(
-                      value: isActive ? 0.94 : 0.0, 
+                      value: isActive ? (_healthIndex / 100.0) : 0.0, 
                       backgroundColor: progressTrackColor,
                       valueColor: AlwaysStoppedAnimation<Color>(progressFillColor),
                       strokeWidth: 8, 
+                      strokeCap: StrokeCap.round,
                     ),
                   ),
-                  Text(isActive ? '94%' : '0%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: darkGreen)),
+                  Text(isActive ? '$_healthIndex%' : '0%', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: primaryTextColor)),
                 ],
               ),
             ],
@@ -661,7 +744,7 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-Widget _buildActiveAlertsWidget(bool isActive) {
+  Widget _buildActiveAlertsWidget(bool isActive) {
     List<Widget> alertRows = [];
 
     // Dynamically generate alerts based on live sensor data
