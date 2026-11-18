@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DataTab extends StatefulWidget {
-  final bool isLoggedIn; 
+  final bool isLoggedIn;
   const DataTab({super.key, this.isLoggedIn = true});
 
   @override
@@ -25,13 +27,17 @@ class _DataTabState extends State<DataTab> {
   String _selectedDateRange = 'Last 30 Days';
   DateTimeRange? _customDateRange;
   bool _showAllLogSensors = false;
-  
-  bool _hasProfileData = false; 
+
+  bool _hasProfileData = false;
   bool _isLoadingData = true;
 
+  // Dynamic AI Trend Insight state
+  String _aiTrendInsight = 'Analyzing sensor trends...';
+  bool _isAnalyzingTrend = false;
+
   // Real sensor rows stored directly from Supabase
-  List<Map<String, dynamic>> _rawSensorData = [];
-  StreamSubscription<List<Map<String, dynamic>>>? _dataStreamSub;
+  List _rawSensorData = [];
+  StreamSubscription<List>? _dataStreamSub;
 
   bool get _isDataActive => widget.isLoggedIn && _hasProfileData;
 
@@ -49,9 +55,10 @@ class _DataTabState extends State<DataTab> {
   void initState() {
     super.initState();
     if (widget.isLoggedIn) {
-      _checkProfileStatus();
-      _fetchHistoricalData();
-      _setupDataStream();
+      _checkProfileStatus().then((_) {
+        _fetchHistoricalData();
+        _setupDataStream();
+      });
     }
   }
 
@@ -68,13 +75,13 @@ class _DataTabState extends State<DataTab> {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
-      
+
       final data = await Supabase.instance.client
           .from('profiles')
           .select('username')
           .eq('id', user.id)
           .maybeSingle();
-          
+
       if (mounted) {
         setState(() {
           _hasProfileData = data != null && data['username'] != null && data['username'].toString().trim().isNotEmpty;
@@ -82,6 +89,94 @@ class _DataTabState extends State<DataTab> {
       }
     } catch (e) {
       debugPrint("DataTab error: $e");
+    }
+  }
+
+  // Maps UI checkboxes to Python FastAPI sensor keys
+  List<String> _getSelectedApiKeys() {
+    List<String> keys = [];
+    if (_showLight) keys.add('light');
+    if (_showHumidity) keys.add('humidity');
+    if (_showPh) keys.add('ph_value');
+    if (_showMoisture) keys.add('soil_moisture');
+    if (_showTemp) keys.add('temperature');
+    return keys;
+  }
+
+  // Calls FastAPI /api/analyze-trend to get scenario-based insight
+  Future<void> _fetchTrendInsight() async {
+    if (!mounted) return;
+
+    if (!_isDataActive) {
+      setState(() {
+        _aiTrendInsight = widget.isLoggedIn
+            ? "Please complete your profile setup in Settings to view AI insights."
+            : "System offline. Please log in to view historical data and AI insights.";
+        _isAnalyzingTrend = false;
+      });
+      return;
+    }
+
+    if (_rawSensorData.isEmpty) {
+      setState(() {
+        _aiTrendInsight = "No telemetry logged yet for this period. AI will provide insights once the ESP32 uploads data.";
+        _isAnalyzingTrend = false;
+      });
+      return;
+    }
+
+    final selectedKeys = _getSelectedApiKeys();
+    if (selectedKeys.isEmpty) {
+      setState(() {
+        _aiTrendInsight = "Select parameters above to generate AI analysis.";
+        _isAnalyzingTrend = false;
+      });
+      return;
+    }
+
+    setState(() => _isAnalyzingTrend = true);
+
+    try {
+      // Extract only numeric sensor values so FastAPI Pydantic validation stays clean
+      final List cleanPoints = _rawSensorData.map((row) {
+        final Map<String, double> point = {};
+        for (final key in selectedKeys) {
+          if (row[key] != null && row[key] is num) {
+            point[key] = (row[key] as num).toDouble();
+          }
+        }
+        return point;
+      }).where((pt) => pt.isNotEmpty).toList();
+
+      final url = Uri.parse('http://10.0.2.2:8000/api/analyze-trend');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'selected_sensors': selectedKeys,
+          'data_points': cleanPoints,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (mounted) {
+          setState(() {
+            _aiTrendInsight = decoded['insight'] ?? 'Unable to generate insight.';
+            _isAnalyzingTrend = false;
+          });
+        }
+      } else {
+        throw Exception('Server returned ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint("Trend Insight API Error: $e");
+      if (mounted) {
+        setState(() {
+          _aiTrendInsight = "Could not reach AI backend. Make sure your FastAPI server is running.";
+          _isAnalyzingTrend = false;
+        });
+      }
     }
   }
 
@@ -118,9 +213,10 @@ class _DataTabState extends State<DataTab> {
 
       if (mounted) {
         setState(() {
-          _rawSensorData = List<Map<String, dynamic>>.from(response);
+          _rawSensorData = List.from(response);
           _isLoadingData = false;
         });
+        _fetchTrendInsight();
       }
     } catch (e) {
       debugPrint("Error fetching sensor historical data: $e");
@@ -138,7 +234,7 @@ class _DataTabState extends State<DataTab> {
       if (mounted && records.isNotEmpty) {
         final start = _getStartDate();
         final end = _getEndDate();
-        
+
         final filtered = records.where((row) {
           final rowTime = DateTime.tryParse(row['created_at']?.toString() ?? '');
           if (rowTime == null) return false;
@@ -148,6 +244,7 @@ class _DataTabState extends State<DataTab> {
         setState(() {
           _rawSensorData = filtered;
         });
+        _fetchTrendInsight();
       }
     });
   }
@@ -161,13 +258,14 @@ class _DataTabState extends State<DataTab> {
       _showMoisture = value;
       _showTemp = value;
     });
+    _fetchTrendInsight();
   }
 
   Widget _buildDynamicDateMessage() {
     if (!_isDataActive) {
       return Text(
-        widget.isLoggedIn ? 'Waiting for profile setup.' : 'System offline.', 
-        style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)
+        widget.isLoggedIn ? 'Waiting for profile setup.' : 'System offline.',
+        style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic),
       );
     }
 
@@ -181,8 +279,8 @@ class _DataTabState extends State<DataTab> {
     }
 
     return Text(
-      message, 
-      style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic)
+      message,
+      style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic),
     );
   }
 
@@ -202,20 +300,21 @@ class _DataTabState extends State<DataTab> {
 
     DateTimeRange? pickedRange = await showDateRangePicker(
       context: context,
-      firstDate: DateTime(2025), 
+      firstDate: DateTime(2025),
       lastDate: DateTime.now().add(const Duration(days: 1)),
-      initialDateRange: _customDateRange ?? DateTimeRange(
-        start: DateTime.now().subtract(const Duration(days: 7)),
-        end: DateTime.now(),
-      ),
+      initialDateRange: _customDateRange ??
+          DateTimeRange(
+            start: DateTime.now().subtract(const Duration(days: 7)),
+            end: DateTime.now(),
+          ),
       builder: (context, child) {
         return Theme(
           data: ThemeData.light().copyWith(
             colorScheme: ColorScheme.light(
-              primary: Colors.green.shade700, 
+              primary: Colors.green.shade700,
               onPrimary: Colors.white,
-              onSurface: const Color(0xFF333333), 
-            ), 
+              onSurface: const Color(0xFF333333),
+            ),
             dialogTheme: const DialogThemeData(backgroundColor: Colors.white),
           ),
           child: Center(
@@ -260,7 +359,7 @@ class _DataTabState extends State<DataTab> {
               _buildChartCard(),
               const SizedBox(height: 20),
               _buildMetricLogTable(),
-              const SizedBox(height: 40), 
+              const SizedBox(height: 40),
             ],
           ),
         ),
@@ -270,19 +369,19 @@ class _DataTabState extends State<DataTab> {
 
   Widget _buildHeaderSection() {
     return SizedBox(
-      width: double.infinity, 
+      width: double.infinity,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center, 
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Text(
             'ECO-SYSTEM INTELLIGENCE',
-            textAlign: TextAlign.center, 
+            textAlign: TextAlign.center,
             style: TextStyle(color: _isDataActive ? const Color(0xFF047857) : Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
           ),
           const SizedBox(height: 4),
           Text(
-            'Historical Analysis', 
-            textAlign: TextAlign.center, 
+            'Historical Analysis',
+            textAlign: TextAlign.center,
             style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1),
           ),
         ],
@@ -304,7 +403,7 @@ class _DataTabState extends State<DataTab> {
                 _buildDateChip('Last 30 Days'),
                 if (_customDateRange != null && _isDataActive) ...[
                   const SizedBox(width: 8),
-                  _buildDateChip(_selectedDateRange), 
+                  _buildDateChip(_selectedDateRange),
                 ]
               ],
             ),
@@ -312,24 +411,26 @@ class _DataTabState extends State<DataTab> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: _isDataActive ? () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: const Row(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.white),
-                    SizedBox(width: 10),
-                    Text('Telemetry logs exported successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                backgroundColor: Colors.green.shade800,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              )
-            );
-          } : null, 
+          onPressed: _isDataActive
+              ? () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Row(
+                        children: [
+                          Icon(Icons.check_circle, color: Colors.white),
+                          SizedBox(width: 10),
+                          Text('Telemetry logs exported successfully!', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      backgroundColor: Colors.green.shade800,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  );
+                }
+              : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _isDataActive ? const Color(0xFF065F46) : Colors.grey.shade300, 
+            backgroundColor: _isDataActive ? const Color(0xFF065F46) : Colors.grey.shade300,
             foregroundColor: _isDataActive ? Colors.white : Colors.grey.shade500,
             elevation: _isDataActive ? 3 : 0,
             shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
@@ -345,17 +446,19 @@ class _DataTabState extends State<DataTab> {
   Widget _buildDateChip(String label) {
     bool isSelected = _selectedDateRange == label && _isDataActive;
     return GestureDetector(
-      onTap: _isDataActive ? () {
-        setState(() {
-          _selectedDateRange = label;
-          if (label == 'Last 7 Days' || label == 'Last 30 Days') {
-            _customDateRange = null; 
-          }
-        });
-        _fetchHistoricalData();
-      } : null,
+      onTap: _isDataActive
+          ? () {
+              setState(() {
+                _selectedDateRange = label;
+                if (label == 'Last 7 Days' || label == 'Last 30 Days') {
+                  _customDateRange = null;
+                }
+              });
+              _fetchHistoricalData();
+            }
+          : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), 
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: isSelected ? Colors.green.shade50 : (_isDataActive ? Colors.white.withOpacity(0.8) : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(30),
@@ -371,11 +474,11 @@ class _DataTabState extends State<DataTab> {
               const SizedBox(width: 6),
             ],
             Text(
-              label, 
+              label,
               style: TextStyle(
-                color: _isDataActive ? (isSelected ? Colors.green.shade800 : const Color(0xFF064E3B)) : Colors.grey, 
-                fontWeight: FontWeight.bold, 
-                fontSize: 12 
+                color: _isDataActive ? (isSelected ? Colors.green.shade800 : const Color(0xFF064E3B)) : Colors.grey,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
               ),
             ),
           ],
@@ -423,11 +526,26 @@ class _DataTabState extends State<DataTab> {
             ],
           ),
           const SizedBox(height: 12),
-          _buildCheckboxRow('Light', _showLight, (val) => setState(() => _showLight = val!)),
-          _buildCheckboxRow('Humidity', _showHumidity, (val) => setState(() => _showHumidity = val!)),
-          _buildCheckboxRow('pH Value', _showPh, (val) => setState(() => _showPh = val!)),
-          _buildCheckboxRow('Soil Moisture', _showMoisture, (val) => setState(() => _showMoisture = val!)),
-          _buildCheckboxRow('Temperature', _showTemp, (val) => setState(() => _showTemp = val!)),
+          _buildCheckboxRow('Light', _showLight, (val) {
+            setState(() => _showLight = val!);
+            _fetchTrendInsight();
+          }),
+          _buildCheckboxRow('Humidity', _showHumidity, (val) {
+            setState(() => _showHumidity = val!);
+            _fetchTrendInsight();
+          }),
+          _buildCheckboxRow('pH Value', _showPh, (val) {
+            setState(() => _showPh = val!);
+            _fetchTrendInsight();
+          }),
+          _buildCheckboxRow('Soil Moisture', _showMoisture, (val) {
+            setState(() => _showMoisture = val!);
+            _fetchTrendInsight();
+          }),
+          _buildCheckboxRow('Temperature', _showTemp, (val) {
+            setState(() => _showTemp = val!);
+            _fetchTrendInsight();
+          }),
         ],
       ),
     );
@@ -438,7 +556,7 @@ class _DataTabState extends State<DataTab> {
       onTap: _isDataActive ? () => onChanged(!value) : null,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8.0), 
+        padding: const EdgeInsets.symmetric(vertical: 8.0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -490,23 +608,21 @@ class _DataTabState extends State<DataTab> {
             child: _buildDynamicLegend(),
           ),
           const SizedBox(height: 28),
-          
           SizedBox(
             height: 180,
             width: double.infinity,
-            child: _isLoadingData 
-              ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
-              : (_rawSensorData.isEmpty 
-                  ? Center(child: Text('No telemetry points found for this range.', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))
-                  : CustomPaint(
-                      painter: RealChartPainter(
-                        sensorData: _rawSensorData,
-                        activeParams: _activeParams,
-                        paramColors: _paramColors,
-                      ),
-                    )),
+            child: _isLoadingData
+                ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
+                : (_rawSensorData.isEmpty
+                    ? Center(child: Text('No telemetry points found for this range.', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))
+                    : CustomPaint(
+                        painter: RealChartPainter(
+                          sensorData: _rawSensorData,
+                          activeParams: _activeParams,
+                          paramColors: _paramColors,
+                        ),
+                      )),
           ),
-          
           Padding(
             padding: const EdgeInsets.only(top: 16.0),
             child: Row(
@@ -514,9 +630,7 @@ class _DataTabState extends State<DataTab> {
               children: _getDynamicXAxis(),
             ),
           ),
-          
           const SizedBox(height: 24),
-          
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -533,10 +647,22 @@ class _DataTabState extends State<DataTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade600, fontSize: 14)),
+                      Row(
+                        children: [
+                          Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade600, fontSize: 14)),
+                          if (_isAnalyzingTrend) ...[
+                            const SizedBox(width: 8),
+                            SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green.shade700),
+                            ),
+                          ],
+                        ],
+                      ),
                       const SizedBox(height: 4),
                       Text(
-                        _getDynamicAIInsight(),
+                        _aiTrendInsight,
                         style: TextStyle(color: _isDataActive ? Colors.green.shade800.withOpacity(0.8) : Colors.grey.shade500, fontSize: 12, height: 1.4),
                       ),
                     ],
@@ -556,7 +682,7 @@ class _DataTabState extends State<DataTab> {
     }
 
     List<Widget> legendItems = _activeParams.map((p) => _buildChartLegendItem(_paramColors[p]!, p.toUpperCase())).toList();
-    
+
     if (legendItems.length <= 3) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -633,34 +759,8 @@ class _DataTabState extends State<DataTab> {
     return labels.map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))).toList();
   }
 
-  String _getDynamicAIInsight() {
-    if (!_isDataActive) {
-      return widget.isLoggedIn 
-        ? "Please complete your profile setup in Settings to view AI insights." 
-        : "System offline. Please log in to view historical data and AI insights.";
-    }
-    if (_rawSensorData.isEmpty) {
-      return "No telemetry logged yet for this period. AI will provide insights once the ESP32 uploads data.";
-    }
-    if (_activeParams.isEmpty) return "Select parameters above to generate AI analysis.";
-    
-    // Evaluate the latest sensor metrics
-    final latest = _rawSensorData.last;
-    final temp = (latest['temperature'] as num?)?.toDouble() ?? 25.0;
-    final humid = (latest['humidity'] as num?)?.toDouble() ?? 75.0;
-    final moist = (latest['soil_moisture'] as num?)?.toInt() ?? 80;
-
-    if (temp > 28.0 && humid > 80.0) {
-      return "High temperature (${temp.toStringAsFixed(1)}°C) and humidity (${humid.toStringAsFixed(0)}%) detected. Ventilation active to support sweet potato leaf transpiration.";
-    }
-    if (moist < 70) {
-      return "Soil moisture dropped below target (${moist}%). Smart irrigation burst will cycle to maintain 80% optimal moisture.";
-    }
-    return "Microclimate is well-balanced for sweet potato vegetative growth. Sensors report steady conditions within optimal zones.";
-  }
-
   // Deconstruct real database records into row entries for each metric
-  List<Map<String, dynamic>> _getFilteredLogs() {
+  List _getFilteredLogs() {
     if (!_isDataActive || _rawSensorData.isEmpty) {
       return [];
     }
@@ -668,8 +768,8 @@ class _DataTabState extends State<DataTab> {
     List<String> targetParams = _showAllLogSensors ? _paramColors.keys.toList() : _activeParams;
     if (targetParams.isEmpty) return [];
 
-    List<Map<String, dynamic>> logList = [];
-    
+    List logList = [];
+
     // Reverse order so newest records are at the top
     final reversed = _rawSensorData.reversed.toList();
 
@@ -682,7 +782,10 @@ class _DataTabState extends State<DataTab> {
         double val = (row['humidity'] as num).toDouble();
         bool isOpt = val >= 70 && val <= 90;
         logList.add({
-          'date': dateStr, 'time': timeStr, 'param': 'Humidity', 'val': '${val.toStringAsFixed(1)}%',
+          'date': dateStr,
+          'time': timeStr,
+          'param': 'Humidity',
+          'val': '${val.toStringAsFixed(1)}%',
           'status': isOpt ? 'Optimal' : (val > 90 ? 'High' : 'Low'),
           'cBg': isOpt ? Colors.green.shade100 : Colors.orange.shade100,
           'cTxt': isOpt ? Colors.green.shade900 : Colors.orange.shade900,
@@ -694,7 +797,10 @@ class _DataTabState extends State<DataTab> {
         int val = (row['soil_moisture'] as num).toInt();
         bool isOpt = val >= 70 && val <= 90;
         logList.add({
-          'date': dateStr, 'time': timeStr, 'param': 'Soil Moisture', 'val': '$val%',
+          'date': dateStr,
+          'time': timeStr,
+          'param': 'Soil Moisture',
+          'val': '$val%',
           'status': isOpt ? 'Optimal' : (val < 50 ? 'Dry' : 'Warning'),
           'cBg': isOpt ? Colors.green.shade100 : Colors.orange.shade100,
           'cTxt': isOpt ? Colors.green.shade900 : Colors.orange.shade900,
@@ -706,7 +812,10 @@ class _DataTabState extends State<DataTab> {
         double val = (row['temperature'] as num).toDouble();
         bool isOpt = val >= 22 && val <= 28;
         logList.add({
-          'date': dateStr, 'time': timeStr, 'param': 'Temperature', 'val': '${val.toStringAsFixed(1)}°C',
+          'date': dateStr,
+          'time': timeStr,
+          'param': 'Temperature',
+          'val': '${val.toStringAsFixed(1)}°C',
           'status': isOpt ? 'Optimal' : (val > 28 ? 'Warm' : 'Cool'),
           'cBg': isOpt ? Colors.green.shade100 : Colors.orange.shade100,
           'cTxt': isOpt ? Colors.green.shade900 : Colors.orange.shade900,
@@ -717,7 +826,10 @@ class _DataTabState extends State<DataTab> {
       if (targetParams.contains('Light') && row['light'] != null) {
         int val = (row['light'] as num).toInt();
         logList.add({
-          'date': dateStr, 'time': timeStr, 'param': 'Light', 'val': '$val Lux',
+          'date': dateStr,
+          'time': timeStr,
+          'param': 'Light',
+          'val': '$val Lux',
           'status': 'Optimal',
           'cBg': Colors.green.shade100,
           'cTxt': Colors.green.shade900,
@@ -729,7 +841,10 @@ class _DataTabState extends State<DataTab> {
         double val = (row['ph_value'] as num).toDouble();
         bool isOpt = val >= 5.8 && val <= 7.2;
         logList.add({
-          'date': dateStr, 'time': timeStr, 'param': 'pH Value', 'val': val.toStringAsFixed(2),
+          'date': dateStr,
+          'time': timeStr,
+          'param': 'pH Value',
+          'val': val.toStringAsFixed(2),
           'status': isOpt ? 'Optimal' : 'Warning',
           'cBg': isOpt ? Colors.green.shade100 : Colors.purple.shade100,
           'cTxt': isOpt ? Colors.green.shade900 : Colors.purple.shade900,
@@ -745,8 +860,8 @@ class _DataTabState extends State<DataTab> {
   }
 
   Widget _buildMetricLogTable() {
-    List<Map<String, dynamic>> filteredLogs = _getFilteredLogs();
-    
+    List filteredLogs = _getFilteredLogs();
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -775,17 +890,17 @@ class _DataTabState extends State<DataTab> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: (_showAllLogSensors && _isDataActive) ? Colors.green.shade700 : (_isDataActive ? Colors.green.shade50 : Colors.grey.shade200), 
-                          borderRadius: BorderRadius.circular(20), 
-                          border: Border.all(color: Colors.green.shade100)
+                          color: (_showAllLogSensors && _isDataActive) ? Colors.green.shade700 : (_isDataActive ? Colors.green.shade50 : Colors.grey.shade200),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.green.shade100),
                         ),
                         child: Text(
-                          'All Sensors', 
+                          'All Sensors',
                           style: TextStyle(
-                            color: (_showAllLogSensors && _isDataActive) ? Colors.white : Colors.grey.shade600, 
-                            fontSize: 10, 
-                            fontWeight: FontWeight.bold
-                          )
+                            color: (_showAllLogSensors && _isDataActive) ? Colors.white : Colors.grey.shade600,
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
@@ -794,7 +909,6 @@ class _DataTabState extends State<DataTab> {
               ],
             ),
           ),
-          
           Padding(
             padding: const EdgeInsets.only(bottom: 12.0, left: 20.0),
             child: Align(
@@ -802,23 +916,22 @@ class _DataTabState extends State<DataTab> {
               child: _buildDynamicDateMessage(),
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFE8F5E9)), 
-          
+          const Divider(height: 1, color: Color(0xFFE8F5E9)),
           SizedBox(
-            height: 300, 
+            height: 300,
             width: double.infinity,
             child: Scrollbar(
-              controller: _tableVerticalScroll, 
+              controller: _tableVerticalScroll,
               thumbVisibility: true,
               thickness: 6,
               radius: const Radius.circular(10),
-              notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical, 
+              notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical,
               child: Scrollbar(
-                controller: _tableHorizontalScroll, 
+                controller: _tableHorizontalScroll,
                 thumbVisibility: true,
                 thickness: 6,
                 radius: const Radius.circular(10),
-                notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal, 
+                notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal,
                 child: SingleChildScrollView(
                   controller: _tableVerticalScroll,
                   scrollDirection: Axis.vertical,
@@ -826,13 +939,12 @@ class _DataTabState extends State<DataTab> {
                     controller: _tableHorizontalScroll,
                     scrollDirection: Axis.horizontal,
                     child: Padding(
-                      padding: const EdgeInsets.only(bottom: 16.0), 
+                      padding: const EdgeInsets.only(bottom: 16.0),
                       child: DataTable(
                         headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
                         dataRowMinHeight: 52,
                         dataRowMaxHeight: 52,
                         dividerThickness: 1,
-                        // Removed SENSOR ID column
                         columns: const [
                           DataColumn(label: Text('DATE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                           DataColumn(label: Text('TIME', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
@@ -840,11 +952,11 @@ class _DataTabState extends State<DataTab> {
                           DataColumn(label: Text('VALUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                           DataColumn(label: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
                         ],
-                        rows: filteredLogs.isEmpty 
-                          ? [const DataRow(cells: [DataCell(Text('')), DataCell(Text('')), DataCell(Text('No Records Found')), DataCell(Text('')), DataCell(Text(''))])]
-                          : filteredLogs.map((log) => _buildDataRow(
-                              log['date'], log['time'], log['param'], log['val'], log['status'], log['cBg'], log['cTxt'], log['cDot']
-                            )).toList(),
+                        rows: filteredLogs.isEmpty
+                            ? [const DataRow(cells: [DataCell(Text('')), DataCell(Text('')), DataCell(Text('No Records Found')), DataCell(Text('')), DataCell(Text(''))])]
+                            : filteredLogs
+                                .map((log) => _buildDataRow(log['date'], log['time'], log['param'], log['val'], log['status'], log['cBg'], log['cTxt'], log['cDot']))
+                                .toList(),
                       ),
                     ),
                   ),
@@ -885,7 +997,7 @@ class _DataTabState extends State<DataTab> {
 
 // Maps real normalized data curves
 class RealChartPainter extends CustomPainter {
-  final List<Map<String, dynamic>> sensorData;
+  final List sensorData;
   final List<String> activeParams;
   final Map<String, Color> paramColors;
 
@@ -928,19 +1040,15 @@ class RealChartPainter extends CustomPainter {
         } else if (param == 'Soil Moisture' && row['soil_moisture'] != null) {
           rawValue = ((row['soil_moisture'] as num).toDouble()).clamp(0.0, 100.0) / 100.0;
         } else if (param == 'Temperature' && row['temperature'] != null) {
-          // Normalize 10°C - 45°C
           rawValue = (((row['temperature'] as num).toDouble() - 10.0) / 35.0).clamp(0.0, 1.0);
         } else if (param == 'Light' && row['light'] != null) {
-          // Normalize 0 - 4095 ADC
           rawValue = ((row['light'] as num).toDouble() / 4095.0).clamp(0.0, 1.0);
         } else if (param == 'pH Value' && row['ph_value'] != null) {
-          // Normalize 0 - 14 pH
           rawValue = ((row['ph_value'] as num).toDouble() / 14.0).clamp(0.0, 1.0);
         }
 
         if (rawValue != null) {
           double x = sensorData.length == 1 ? size.width / 2 : (i / (sensorData.length - 1)) * size.width;
-          // Canvas coordinates are inverted vertically: 0 is top, height is bottom
           double y = size.height - (rawValue * (size.height * 0.85) + (size.height * 0.07));
 
           if (firstPoint) {
