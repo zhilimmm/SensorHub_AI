@@ -223,7 +223,10 @@ onSelected: (String value) async {
         ],
       ),
       
-      body: pages[_selectedIndex], 
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: pages,
+      ),
 
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
