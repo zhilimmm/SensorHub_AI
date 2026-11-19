@@ -66,7 +66,7 @@ class _AITabState extends State<AITab> {
 
       // Trigger the Python FastAPI backend to run the Random Forest
       if (sensorData != null) {
-        final url = Uri.parse('http://10.0.2.2:8000/api/predict');
+        final url = Uri.parse('https://sensorhub-ai-backend.onrender.com/api/predict');
         await http.post(
           url,
           headers: {'Content-Type': 'application/json'},

@@ -154,7 +154,7 @@ class _DataTabState extends State<DataTab> {
         return point;
       }).where((pt) => pt.isNotEmpty).toList();
 
-      final url = Uri.parse('http://10.0.2.2:8000/api/analyze-trend');
+      final url = Uri.parse('https://sensorhub-ai-backend.onrender.com/api/analyze-trend');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -301,7 +301,7 @@ class _DataTabState extends State<DataTab> {
       final pdfBase64 = base64Encode(pdfBytes);
       final fileName = 'SensorHub_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
 
-      final emailUrl = Uri.parse('http://10.0.2.2:8000/api/email-report');
+      final emailUrl = Uri.parse('https://sensorhub-ai-backend.onrender.com/api/email-report');
       final emailRes = await http.post(
         emailUrl,
         headers: {'Content-Type': 'application/json'},
