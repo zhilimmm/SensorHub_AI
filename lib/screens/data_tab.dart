@@ -821,41 +821,14 @@ class _DataTabState extends State<DataTab> {
       return Center(child: Text('No parameters selected', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)));
     }
 
-    List<Widget> legendItems = _activeParams.map((p) => _buildChartLegendItem(_paramColors[p]!, p.toUpperCase())).toList();
-
-    if (legendItems.length <= 3) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: _addSpacing(legendItems, 16.0),
-      );
-    } else if (legendItems.length == 4) {
-      return Column(
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: _addSpacing(legendItems.sublist(0, 2), 16.0)),
-          const SizedBox(height: 12),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: _addSpacing(legendItems.sublist(2, 4), 16.0)),
-        ],
-      );
-    } else {
-      return Column(
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: _addSpacing(legendItems.sublist(0, 3), 16.0)),
-          const SizedBox(height: 12),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: _addSpacing(legendItems.sublist(3, 5), 16.0)),
-        ],
-      );
-    }
-  }
-
-  List<Widget> _addSpacing(List<Widget> items, double spacing) {
-    List<Widget> result = [];
-    for (int i = 0; i < items.length; i++) {
-      result.add(items[i]);
-      if (i != items.length - 1) {
-        result.add(SizedBox(width: spacing));
-      }
-    }
-    return result;
+    return Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 14.0,
+      runSpacing: 8.0,
+      children: _activeParams
+          .map((p) => _buildChartLegendItem(_paramColors[p]!, p.toUpperCase()))
+          .toList(),
+    );
   }
 
   Widget _buildChartLegendItem(Color color, String label) {
