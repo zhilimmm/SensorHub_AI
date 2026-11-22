@@ -41,7 +41,7 @@ class _DataTabState extends State<DataTab> {
   String _aiTrendInsight = 'Analyzing sensor trends...';
   bool _isAnalyzingTrend = false;
 
-  // Real sensor rows stored directly from Supabase
+  // Real sensor rows stored directly from Supabase (isolated by user_id)
   List _rawSensorData = [];
   StreamSubscription? _dataStreamSub;
 
@@ -64,6 +64,26 @@ class _DataTabState extends State<DataTab> {
       _checkProfileStatus().then((_) {
         _fetchHistoricalData();
         _setupDataStream();
+      });
+    } else {
+      _isLoadingData = false;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DataTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isLoggedIn && !oldWidget.isLoggedIn) {
+      _checkProfileStatus().then((_) {
+        _fetchHistoricalData();
+        _setupDataStream();
+      });
+    } else if (!widget.isLoggedIn && oldWidget.isLoggedIn) {
+      _dataStreamSub?.cancel();
+      setState(() {
+        _hasProfileData = false;
+        _rawSensorData = [];
+        _isLoadingData = false;
       });
     }
   }
@@ -99,8 +119,8 @@ class _DataTabState extends State<DataTab> {
   }
 
   // Maps UI checkboxes to Python FastAPI sensor keys
-  List<String> _getSelectedApiKeys() {
-    List<String> keys = [];
+  List _getSelectedApiKeys() {
+    final keys = [];
     if (_showLight) keys.add('light');
     if (_showHumidity) keys.add('humidity');
     if (_showPh) keys.add('ph_value');
@@ -125,7 +145,7 @@ class _DataTabState extends State<DataTab> {
 
     if (_rawSensorData.isEmpty) {
       setState(() {
-        _aiTrendInsight = "No telemetry logged yet for this period. AI will provide insights once the ESP32 uploads data.";
+        _aiTrendInsight = "No sensor data in database for this account yet. AI insights will appear once your ESP32 uploads telemetry.";
         _isAnalyzingTrend = false;
       });
       return;
@@ -143,9 +163,8 @@ class _DataTabState extends State<DataTab> {
     setState(() => _isAnalyzingTrend = true);
 
     try {
-      // Extract only numeric sensor values so FastAPI Pydantic validation stays clean
-      final List cleanPoints = _rawSensorData.map((row) {
-        final Map<String, double> point = {};
+      final cleanPoints = _rawSensorData.map((row) {
+        final point = {};
         for (final key in selectedKeys) {
           if (row[key] != null && row[key] is num) {
             point[key] = (row[key] as num).toDouble();
@@ -198,7 +217,6 @@ class _DataTabState extends State<DataTab> {
     setState(() => _isExporting = true);
 
     try {
-      // 1. Capture the line chart as a crisp PNG
       final boundary = _chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       ui.Image? chartImage;
       if (boundary != null) {
@@ -207,7 +225,6 @@ class _DataTabState extends State<DataTab> {
       final byteData = await chartImage?.toByteData(format: ui.ImageByteFormat.png);
       final chartBytes = byteData?.buffer.asUint8List();
 
-      // 2. Build the PDF document using ONLY the selected parameters
       final pdf = pw.Document();
       final filteredLogs = _getFilteredLogs(forceSelectedOnly: true);
 
@@ -217,7 +234,6 @@ class _DataTabState extends State<DataTab> {
           margin: const pw.EdgeInsets.all(24),
           build: (pw.Context context) {
             return [
-              // Header
               pw.Text(
                 'SensorHub AI - Telemetry Report',
                 style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
@@ -232,8 +248,6 @@ class _DataTabState extends State<DataTab> {
                 style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
               ),
               pw.Divider(height: 20),
-
-              // Embedded Line Chart
               if (chartBytes != null) ...[
                 pw.Text('Sensor Overlay Chart', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 8),
@@ -247,8 +261,6 @@ class _DataTabState extends State<DataTab> {
                 ),
                 pw.SizedBox(height: 16),
               ],
-
-              // AI Insight Box
               pw.Container(
                 width: double.infinity,
                 padding: const pw.EdgeInsets.all(12),
@@ -267,8 +279,6 @@ class _DataTabState extends State<DataTab> {
                 ),
               ),
               pw.SizedBox(height: 20),
-
-              // Filtered Telemetry Table
               pw.Text('Metric Log (Selected Parameters)', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 8),
               pw.TableHelper.fromTextArray(
@@ -290,14 +300,12 @@ class _DataTabState extends State<DataTab> {
         ),
       );
 
-      // 3. Get the logged-in user's email and send PDF to FastAPI
       final userEmail = Supabase.instance.client.auth.currentUser?.email;
       if (userEmail == null || userEmail.isEmpty) {
         throw Exception('No registered email found for this account.');
       }
 
       final pdfBytes = await pdf.save();
-
       final pdfBase64 = base64Encode(pdfBytes);
       final fileName = 'SensorHub_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
 
@@ -337,7 +345,6 @@ class _DataTabState extends State<DataTab> {
     }
   }
 
-  // Calculate the query start boundary
   DateTime _getStartDate() {
     if (_customDateRange != null) return _customDateRange!.start;
     if (_selectedDateRange == 'Last 7 Days') {
@@ -346,7 +353,6 @@ class _DataTabState extends State<DataTab> {
     return DateTime.now().subtract(const Duration(days: 30));
   }
 
-  // Calculate the query end boundary
   DateTime _getEndDate() {
     if (_customDateRange != null) {
       return DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
@@ -354,8 +360,14 @@ class _DataTabState extends State<DataTab> {
     return DateTime.now();
   }
 
-  // Fetch real sensor records from Supabase
+  // Fetch real sensor records from Supabase filtered by `user_id`
   Future<void> _fetchHistoricalData() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) setState(() => _isLoadingData = false);
+      return;
+    }
+
     setState(() => _isLoadingData = true);
     try {
       final startIso = _getStartDate().toIso8601String();
@@ -364,6 +376,7 @@ class _DataTabState extends State<DataTab> {
       final response = await Supabase.instance.client
           .from('sweet_potato_leave_data')
           .select()
+          .eq('user_id', user.id)
           .gte('created_at', startIso)
           .lte('created_at', endIso)
           .order('created_at', ascending: true);
@@ -377,32 +390,43 @@ class _DataTabState extends State<DataTab> {
       }
     } catch (e) {
       debugPrint("Error fetching sensor historical data: $e");
-      if (mounted) setState(() => _isLoadingData = false);
-    }
-  }
-
-  // Live real-time stream listener for incoming sensor packets
-  void _setupDataStream() {
-    _dataStreamSub = Supabase.instance.client
-        .from('sweet_potato_leave_data')
-        .stream(primaryKey: ['id'])
-        .order('created_at', ascending: true)
-        .listen((records) {
-      if (mounted && records.isNotEmpty) {
-        final start = _getStartDate();
-        final end = _getEndDate();
-
-        final filtered = records.where((row) {
-          final rowTime = DateTime.tryParse(row['created_at']?.toString() ?? '');
-          if (rowTime == null) return false;
-          return rowTime.isAfter(start) && rowTime.isBefore(end);
-        }).toList();
-
+      if (mounted) {
         setState(() {
-          _rawSensorData = filtered;
+          _rawSensorData = [];
+          _isLoadingData = false;
         });
         _fetchTrendInsight();
       }
+    }
+  }
+
+  // Live real-time stream listener isolated by `user_id`
+  void _setupDataStream() {
+    _dataStreamSub?.cancel();
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    _dataStreamSub = Supabase.instance.client
+        .from('sweet_potato_leave_data')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', user.id)
+        .order('created_at', ascending: true)
+        .listen((records) {
+      if (!mounted) return;
+      final start = _getStartDate();
+      final end = _getEndDate();
+
+      final filtered = records.where((row) {
+        final rowTime = DateTime.tryParse(row['created_at']?.toString() ?? '');
+        if (rowTime == null) return false;
+        return rowTime.isAfter(start) && rowTime.isBefore(end);
+      }).toList();
+
+      setState(() {
+        _rawSensorData = filtered;
+      });
+      _fetchTrendInsight();
     });
   }
 
@@ -441,9 +465,9 @@ class _DataTabState extends State<DataTab> {
     );
   }
 
-  List<String> get _activeParams {
+  List get _activeParams {
     if (!_isDataActive) return [];
-    List<String> active = [];
+    final active = [];
     if (_showLight) active.add('Light');
     if (_showHumidity) active.add('Humidity');
     if (_showPh) active.add('pH Value');
@@ -530,6 +554,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   Widget _buildFilterAndExportRow() {
+    final bool canExport = _isDataActive && _rawSensorData.isNotEmpty && !_isExporting;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -551,11 +576,11 @@ class _DataTabState extends State<DataTab> {
         ),
         const SizedBox(width: 12),
         ElevatedButton(
-          onPressed: (_isDataActive && !_isExporting) ? _exportPdfReport : null,
+          onPressed: canExport ? _exportPdfReport : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: _isDataActive ? const Color(0xFF065F46) : Colors.grey.shade300,
-            foregroundColor: _isDataActive ? Colors.white : Colors.grey.shade500,
-            elevation: _isDataActive ? 3 : 0,
+            backgroundColor: canExport ? const Color(0xFF065F46) : Colors.grey.shade300,
+            foregroundColor: canExport ? Colors.white : Colors.grey.shade500,
+            elevation: canExport ? 3 : 0,
             shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -750,7 +775,13 @@ class _DataTabState extends State<DataTab> {
                     child: _isLoadingData
                         ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
                         : (_rawSensorData.isEmpty
-                            ? Center(child: Text('No telemetry points found for this range.', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)))
+                            ? Center(
+                                child: Text(
+                                  'No sensor data in database for this account yet.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                                ),
+                              )
                             : CustomPaint(
                                 painter: RealChartPainter(
                                   sensorData: _rawSensorData,
@@ -761,10 +792,7 @@ class _DataTabState extends State<DataTab> {
                   ),
                   Padding(
                     padding: const EdgeInsets.only(top: 16.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: _getDynamicXAxis(),
-                    ),
+                    child: _buildDynamicXAxisRow(),
                   ),
                 ],
               ),
@@ -826,7 +854,7 @@ class _DataTabState extends State<DataTab> {
       spacing: 14.0,
       runSpacing: 8.0,
       children: _activeParams
-          .map((p) => _buildChartLegendItem(_paramColors[p]!, p.toUpperCase()))
+          .map((p) => _buildChartLegendItem(_paramColors[p]!, p.toString().toUpperCase()))
           .toList(),
     );
   }
@@ -842,9 +870,14 @@ class _DataTabState extends State<DataTab> {
     );
   }
 
-  List<Widget> _getDynamicXAxis() {
+  Widget _buildDynamicXAxisRow() {
     if (!_isDataActive || _rawSensorData.isEmpty) {
-      return ['--', '--', '--', '--'].map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))).toList();
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: ['--', '--', '--', '--']
+            .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
+            .toList(),
+      );
     }
 
     if (_rawSensorData.length >= 4) {
@@ -856,34 +889,37 @@ class _DataTabState extends State<DataTab> {
       DateTime p3 = first.add(Duration(milliseconds: (diff.inMilliseconds * 0.66).round()));
 
       final fmt = DateFormat('MM/dd');
-      return [fmt.format(first), fmt.format(p2), fmt.format(p3), fmt.format(last)]
-          .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
-          .toList();
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [fmt.format(first), fmt.format(p2), fmt.format(p3), fmt.format(last)]
+            .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
+            .toList(),
+      );
     }
 
-    List<String> labels;
-    if (_selectedDateRange == 'Last 7 Days') {
-      labels = ['Day 1', 'Day 3', 'Day 5', 'Day 7'];
-    } else if (_selectedDateRange == 'Last 30 Days') {
-      labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-    } else {
-      labels = ['Start', 'Mid', 'End'];
-    }
-    return labels.map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))).toList();
+    final labels = _selectedDateRange == 'Last 7 Days'
+        ? ['Day 1', 'Day 3', 'Day 5', 'Day 7']
+        : (_selectedDateRange == 'Last 30 Days'
+            ? ['Week 1', 'Week 2', 'Week 3', 'Week 4']
+            : ['Start', 'Mid', 'End']);
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: labels
+          .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
+          .toList(),
+    );
   }
 
-  // Deconstruct real database records into row entries for each metric
   List _getFilteredLogs({bool forceSelectedOnly = false}) {
     if (!_isDataActive || _rawSensorData.isEmpty) {
       return [];
     }
 
-    List<String> targetParams = (!forceSelectedOnly && _showAllLogSensors) ? _paramColors.keys.toList() : _activeParams;
+    final targetParams = (!forceSelectedOnly && _showAllLogSensors) ? _paramColors.keys.toList() : _activeParams;
     if (targetParams.isEmpty) return [];
 
-    List logList = [];
-
-    // Reverse order so newest records are at the top
+    final logList = [];
     final reversed = _rawSensorData.reversed.toList();
 
     for (var row in reversed) {
@@ -965,7 +1001,6 @@ class _DataTabState extends State<DataTab> {
         });
       }
 
-      // Keep table snappy by limiting to recent records
       if (logList.length >= 40) break;
     }
 
@@ -973,7 +1008,7 @@ class _DataTabState extends State<DataTab> {
   }
 
   Widget _buildMetricLogTable() {
-    List filteredLogs = _getFilteredLogs();
+    final filteredLogs = _getFilteredLogs();
 
     return Container(
       decoration: BoxDecoration(
@@ -1108,10 +1143,9 @@ class _DataTabState extends State<DataTab> {
   }
 }
 
-// Maps real normalized data curves
 class RealChartPainter extends CustomPainter {
   final List sensorData;
-  final List<String> activeParams;
+  final List activeParams;
   final Map<String, Color> paramColors;
 
   RealChartPainter({
@@ -1229,9 +1263,9 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
     });
   }
 
-  List<DateTime> _buildCalendarDays() {
+  List _buildCalendarDays() {
     final firstDayOfMonth = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
-    final int leadingDays = firstDayOfMonth.weekday % 7; // Sunday = 0
+    final int leadingDays = firstDayOfMonth.weekday % 7;
     final startGrid = firstDayOfMonth.subtract(Duration(days: leadingDays));
 
     return List.generate(42, (index) => startGrid.add(Duration(days: index)));
@@ -1263,7 +1297,6 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Month Header with Circular Arrows
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -1288,8 +1321,6 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
               ],
             ),
             const SizedBox(height: 18),
-
-            // Weekday Labels
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: weekDays
@@ -1310,8 +1341,6 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
             const SizedBox(height: 8),
             Divider(height: 1, color: Colors.grey.shade200),
             const SizedBox(height: 10),
-
-            // 6x7 Calendar Grid
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
@@ -1322,7 +1351,7 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
                 childAspectRatio: 1.05,
               ),
               itemBuilder: (context, index) {
-                final day = days[index];
+                final DateTime day = days[index];
                 final isCurrentMonth = day.month == _focusedMonth.month;
                 final isFuture = day.isAfter(today);
                 final isStart = _isSameDay(day, _startDate);
@@ -1333,7 +1362,6 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
                     day.isBefore(_endDate!);
                 final hasRange = _startDate != null && _endDate != null && !_isSameDay(_startDate, _endDate);
 
-                // Range connector bar
                 BoxDecoration? rangeDecoration;
                 if (isInRange) {
                   rangeDecoration = BoxDecoration(color: _softGreen);
@@ -1379,8 +1407,6 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
               },
             ),
             const SizedBox(height: 14),
-
-            // Compact Action Row
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [

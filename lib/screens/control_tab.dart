@@ -12,20 +12,17 @@ class ControlsTab extends StatefulWidget {
 
 class _ControlsTabState extends State<ControlsTab> {
   bool _hasProfileData = false;
+  bool _hasHardwareData = false;
+
   bool get _isActive => widget.isLoggedIn && _hasProfileData;
+  bool get _isHardwareReady => _isActive && _hasHardwareData;
 
-  // Track Mode
   bool _automationActive = true;
-
-  // Track Manual States
   bool _manualPumpOn = false;
   bool _manualFanOn = false;
-
-  // Track Auto States
   bool _autoPumpOn = false;
   bool _autoFanOn = false;
 
-  // Stream Trackers to prevent Ghost Widgets
   StreamSubscription? _controlsSub;
   StreamSubscription? _sensorSub;
 
@@ -49,6 +46,9 @@ class _ControlsTabState extends State<ControlsTab> {
       _sensorSub?.cancel();
       setState(() {
         _hasProfileData = false;
+        _hasHardwareData = false;
+        _autoPumpOn = false;
+        _autoFanOn = false;
       });
     }
   }
@@ -85,6 +85,9 @@ class _ControlsTabState extends State<ControlsTab> {
     _controlsSub?.cancel();
     _sensorSub?.cancel();
 
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
     _controlsSub = Supabase.instance.client
         .from('device_controls')
         .stream(primaryKey: ['id'])
@@ -99,22 +102,31 @@ class _ControlsTabState extends State<ControlsTab> {
       }
     });
 
+    // Listen only to telemetry belonging to the logged-in user's `user_id`
     _sensorSub = Supabase.instance.client
         .from('sweet_potato_leave_data')
         .stream(primaryKey: ['id'])
+        .eq('user_id', user.id)
         .order('created_at', ascending: false)
         .limit(1)
         .listen((records) {
-      if (mounted && records.isNotEmpty) {
+      if (!mounted) return;
+      if (records.isNotEmpty) {
         setState(() {
+          _hasHardwareData = true;
           _autoPumpOn = (records.first['irrigation_need'] == 1);
           _autoFanOn = (records.first['ventilation_need'] == 1);
+        });
+      } else {
+        setState(() {
+          _hasHardwareData = false;
+          _autoPumpOn = false;
+          _autoFanOn = false;
         });
       }
     });
   }
 
-  // Wipes out manual overrides when AI is turned back on
   Future<void> _setAutomationMode(bool isActive) async {
     setState(() {
       _automationActive = isActive;
@@ -232,7 +244,7 @@ class _ControlsTabState extends State<ControlsTab> {
               fontSize: 10,
               fontWeight: FontWeight.bold,
               letterSpacing: 2,
-              color: _isActive ? const Color(0xFF005A3C) : Colors.grey.shade500,
+              color: _isHardwareReady ? const Color(0xFF005A3C) : Colors.grey.shade500,
             ),
           ),
           const SizedBox(height: 8),
@@ -241,7 +253,7 @@ class _ControlsTabState extends State<ControlsTab> {
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w900,
-              color: _isActive ? const Color(0xFF022C22) : Colors.grey.shade700,
+              color: _isHardwareReady ? const Color(0xFF022C22) : Colors.grey.shade700,
               height: 1.1,
             ),
             textAlign: TextAlign.center,
@@ -252,6 +264,46 @@ class _ControlsTabState extends State<ControlsTab> {
   }
 
   Widget _buildAutomationBanner() {
+    if (!_hasHardwareData) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.sensors_off, color: Colors.grey.shade500, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No Hardware Connected',
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                  Text(
+                    'No sensor data in database for this account yet.',
+                    style: TextStyle(
+                      color: Colors.grey.shade500,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -369,18 +421,22 @@ class _ControlsTabState extends State<ControlsTab> {
     Function(bool) onChanged,
   ) {
     bool displayState = _automationActive ? autoState : manualState;
-    String statusText = _automationActive
-        ? (autoState ? "AUTO: ON" : "AUTO: OFF")
-        : (manualState ? "FORCED: ON" : "FORCED: OFF");
-    Color statusColor = _automationActive
-        ? (autoState ? const Color(0xFFED8936) : Colors.grey.shade400)
-        : (manualState ? iconColor.shade700 : Colors.grey.shade500);
+    String statusText = !_isHardwareReady
+        ? "OFFLINE"
+        : (_automationActive
+            ? (autoState ? "AUTO: ON" : "AUTO: OFF")
+            : (manualState ? "FORCED: ON" : "FORCED: OFF"));
+    Color statusColor = !_isHardwareReady
+        ? Colors.grey.shade400
+        : (_automationActive
+            ? (autoState ? const Color(0xFFED8936) : Colors.grey.shade400)
+            : (manualState ? iconColor.shade700 : Colors.grey.shade500));
 
     return Container(
       height: height,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _isActive && displayState ? bgColor : Colors.white,
+        color: _isHardwareReady && displayState ? bgColor : Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)],
       ),
@@ -393,17 +449,17 @@ class _ControlsTabState extends State<ControlsTab> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: _isActive && displayState ? iconColor.shade100 : Colors.grey.shade100,
+                  color: _isHardwareReady && displayState ? iconColor.shade100 : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   icon,
-                  color: _isActive && displayState ? iconColor.shade700 : Colors.grey.shade400,
+                  color: _isHardwareReady && displayState ? iconColor.shade700 : Colors.grey.shade400,
                 ),
               ),
               Switch(
-                value: _isActive ? displayState : false,
-                onChanged: _isActive ? onChanged : null,
+                value: _isHardwareReady ? displayState : false,
+                onChanged: _isHardwareReady ? onChanged : null,
                 activeThumbColor: const Color(0xFF006947),
               ),
             ],
@@ -424,7 +480,7 @@ class _ControlsTabState extends State<ControlsTab> {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade500,
+              color: _isHardwareReady ? const Color(0xFF2C2F30) : Colors.grey.shade500,
             ),
           ),
           const SizedBox(height: 2),
@@ -474,7 +530,7 @@ class _ControlsTabState extends State<ControlsTab> {
         children: [
           Row(
             children: [
-              CircleAvatar(radius: 4, backgroundColor: _isActive ? dotColor : Colors.grey),
+              CircleAvatar(radius: 4, backgroundColor: _isHardwareReady ? dotColor : Colors.grey),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -496,7 +552,7 @@ class _ControlsTabState extends State<ControlsTab> {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: _isActive ? const Color(0xFF2C2F30) : Colors.grey.shade400,
+              color: _isHardwareReady ? const Color(0xFF2C2F30) : Colors.grey.shade400,
               height: 1.4,
             ),
           ),
@@ -509,10 +565,10 @@ class _ControlsTabState extends State<ControlsTab> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: _isActive ? const Color(0xFFF95630).withOpacity(0.1) : Colors.grey.shade200,
+        color: _isHardwareReady ? const Color(0xFFF95630).withOpacity(0.1) : Colors.grey.shade200,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: _isActive ? const Color(0xFFF95630).withOpacity(0.3) : Colors.grey.shade300,
+          color: _isHardwareReady ? const Color(0xFFF95630).withOpacity(0.3) : Colors.grey.shade300,
         ),
       ),
       child: Column(
@@ -522,7 +578,7 @@ class _ControlsTabState extends State<ControlsTab> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: _isActive ? const Color(0xFFB02500) : Colors.grey.shade400,
+                  color: _isHardwareReady ? const Color(0xFFB02500) : Colors.grey.shade400,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 30),
@@ -537,14 +593,14 @@ class _ControlsTabState extends State<ControlsTab> {
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: _isActive ? const Color(0xFF520C00) : Colors.grey.shade600,
+                        color: _isHardwareReady ? const Color(0xFF520C00) : Colors.grey.shade600,
                       ),
                     ),
                     Text(
                       'Instantly cut power to all actuators',
                       style: TextStyle(
                         fontSize: 12,
-                        color: _isActive
+                        color: _isHardwareReady
                             ? const Color(0xFF520C00).withOpacity(0.8)
                             : Colors.grey.shade500,
                       ),
@@ -559,7 +615,7 @@ class _ControlsTabState extends State<ControlsTab> {
             width: double.infinity,
             height: 50,
             child: ElevatedButton(
-              onPressed: _isActive ? _emergencyStopAll : null,
+              onPressed: _isHardwareReady ? _emergencyStopAll : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFB02500),
                 foregroundColor: Colors.white,
