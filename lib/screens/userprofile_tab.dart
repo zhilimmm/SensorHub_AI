@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'login_screen.dart';
 import '../main.dart';
@@ -74,11 +76,13 @@ const List<CropPreset> kSuggestedCrops = [
 class SettingsTab extends StatefulWidget {
   final bool isLoggedIn;
   final VoidCallback? onPlantChanged;
+  final VoidCallback? onProfileUpdated;
 
   const SettingsTab({
     super.key,
     this.isLoggedIn = true,
     this.onPlantChanged,
+    this.onProfileUpdated,
   });
 
   @override
@@ -94,16 +98,17 @@ class _SettingsTabState extends State<SettingsTab> {
 
   bool _isEditingAccount = false;
   bool _isLoading = true;
+  bool _isUploadingAvatar = false;
   final TextEditingController _usernameController = TextEditingController();
 
   bool get _hasProfileData => widget.isLoggedIn && _usernameController.text.trim().isNotEmpty;
 
+  String? _avatarUrl;
   String? _selectedCountry;
   String? _selectedState;
   String? _selectedCity;
   String? _selectedLanguage;
 
-  // Active experimental plant state from `public.user_plants`
   String? _activePlantName;
   int? _activeHarvestDays;
 
@@ -159,12 +164,14 @@ class _SettingsTabState extends State<SettingsTab> {
 
       if (data != null) {
         _usernameController.text = data['username'] as String? ?? '';
+        _avatarUrl = data['avatar_url'] as String?;
         _selectedCountry = data['country'] as String?;
         _selectedState = data['state'] as String?;
         _selectedCity = data['city'] as String?;
         _selectedLanguage = data['language'] as String?;
       } else {
         _usernameController.text = '';
+        _avatarUrl = null;
         _selectedCountry = null;
         _selectedState = null;
         _selectedCity = null;
@@ -172,6 +179,70 @@ class _SettingsTabState extends State<SettingsTab> {
       }
     } catch (error) {
       debugPrint('Error loading profile: $error');
+    }
+  }
+
+  Future<void> _pickAndUploadAvatar() async {
+    if (!widget.isLoggedIn || _isUploadingAvatar) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 80,
+    );
+
+    if (pickedFile == null) return;
+
+    setState(() => _isUploadingAvatar = true);
+
+    try {
+      final file = File(pickedFile.path);
+      final fileExt = pickedFile.path.split('.').last.toLowerCase();
+      final filePath = '${user.id}/avatar.$fileExt';
+
+      await Supabase.instance.client.storage.from('avatars').upload(
+            filePath,
+            file,
+            fileOptions: const FileOptions(upsert: true),
+          );
+
+      // Append timestamp query param so Flutter refreshes the cached image immediately
+      final publicUrl =
+          '${Supabase.instance.client.storage.from('avatars').getPublicUrl(filePath)}?t=${DateTime.now().millisecondsSinceEpoch}';
+
+      await Supabase.instance.client.from('profiles').upsert({
+        'id': user.id,
+        'avatar_url': publicUrl,
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      if (mounted) {
+        setState(() => _avatarUrl = publicUrl);
+        widget.onProfileUpdated?.call();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Profile picture updated!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Avatar upload error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to upload image: $e'),
+            backgroundColor: Colors.red.shade700,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploadingAvatar = false);
     }
   }
 
@@ -206,7 +277,7 @@ class _SettingsTabState extends State<SettingsTab> {
 
       final updates = {
         'id': user.id,
-        'username': _usernameController.text,
+        'username': _usernameController.text.trim(),
         'country': _selectedCountry,
         'state': _selectedState,
         'city': _selectedCity,
@@ -217,6 +288,7 @@ class _SettingsTabState extends State<SettingsTab> {
       await Supabase.instance.client.from('profiles').upsert(updates);
 
       if (mounted) {
+        widget.onProfileUpdated?.call();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile saved successfully!'), backgroundColor: Colors.green),
         );
@@ -275,11 +347,8 @@ class _SettingsTabState extends State<SettingsTab> {
                   const SizedBox(height: 32),
                   _buildNotificationPreferences(),
                   const SizedBox(height: 40),
-
-                  // Show Logged In Buttons or Offline Buttons
                   if (widget.isLoggedIn) _buildFooterWithOvalButtons(),
                   if (!widget.isLoggedIn) _buildGuestFooter(),
-
                   const SizedBox(height: 40),
                 ],
               ),
@@ -319,32 +388,48 @@ class _SettingsTabState extends State<SettingsTab> {
       defaultName = currentUser.email!.split('@')[0];
     }
 
+    final bool hasUploadedAvatar =
+        widget.isLoggedIn && _avatarUrl != null && _avatarUrl!.trim().isNotEmpty;
+
     return Column(
       children: [
         Center(
-          child: Stack(
-            alignment: Alignment.bottomRight,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: _hasProfileData
-                    ? const CircleAvatar(
-                        radius: 50,
-                        backgroundImage: AssetImage('assets/zhilim_pic.jpeg'),
-                      )
-                    : CircleAvatar(
-                        radius: 50,
-                        backgroundColor: Colors.grey.shade200,
-                        child: Icon(Icons.person, size: 70, color: Colors.grey.shade500),
-                      ),
-              ),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(color: widget.isLoggedIn ? _darkGreen : Colors.grey, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                child: const Icon(Icons.edit, color: Colors.white, size: 14),
-              ),
-            ],
+          child: GestureDetector(
+            onTap: widget.isLoggedIn ? _pickAndUploadAvatar : null,
+            child: Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                  child: _isUploadingAvatar
+                      ? CircleAvatar(
+                          radius: 50,
+                          backgroundColor: Colors.grey.shade200,
+                          child: const CircularProgressIndicator(color: Colors.green),
+                        )
+                      : hasUploadedAvatar
+                          ? CircleAvatar(
+                              radius: 50,
+                              backgroundImage: NetworkImage(_avatarUrl!),
+                            )
+                          : CircleAvatar(
+                              radius: 50,
+                              backgroundColor: Colors.grey.shade200,
+                              child: Icon(Icons.person, size: 70, color: Colors.grey.shade500),
+                            ),
+                ),
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: widget.isLoggedIn ? _darkGreen : Colors.grey,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                ),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 16),
@@ -579,7 +664,6 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // Colorful Offline / Guest Settings Footer
   Widget _buildGuestFooter() {
     return Column(
       children: [
@@ -622,7 +706,6 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
-  // Logged In Settings Footer (Add/Change Plant, Switch Account & Logout)
   Widget _buildFooterWithOvalButtons() {
     final bool hasPlant = _activePlantName != null && _activePlantName!.trim().isNotEmpty;
     final String plantButtonLabel = hasPlant
