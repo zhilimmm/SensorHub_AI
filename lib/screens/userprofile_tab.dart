@@ -807,6 +807,9 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
   int _harvestDays = 40;
   DateTime _plantedDate = DateTime.now();
   bool _isSaving = false;
+  bool _isDeleting = false;
+
+  bool get _isBusy => _isSaving || _isDeleting;
 
   static const Color _darkGreen = Color(0xFF0A3B24);
   static const Color _accentGreen = Color(0xFF16A34A);
@@ -932,6 +935,81 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
     }
   }
 
+  Future<void> _confirmAndRemovePlant() async {
+    final removedName = widget.currentPlantName ?? 'this plant';
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFC0392B)),
+            SizedBox(width: 8),
+            Text(
+              'Remove Active Plant?',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: _darkGreen),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to remove "$removedName"? Your growth cycle tracking will return to standby until you assign a new plant.',
+          style: TextStyle(fontSize: 13.5, color: Colors.grey.shade700, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Keep Plant', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFC0392B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => _isDeleting = true);
+
+    try {
+      await Supabase.instance.client
+          .from('user_plants')
+          .delete()
+          .eq('user_id', user.id);
+
+      if (!mounted) return;
+      widget.onPlantSaved();
+      Navigator.of(context).pop(true);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.grey.shade800,
+          content: Text('Removed "$removedName" from active tracking.'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.red.shade700,
+          content: Text('Failed to remove plant: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isUpdating =
@@ -983,7 +1061,7 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
                   ),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
-                    onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+                    onPressed: _isBusy ? null : () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
@@ -1215,6 +1293,7 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
 
               const SizedBox(height: 18),
 
+              // Primary Row: Cancel & Update/Start Growing
               Row(
                 children: [
                   Expanded(
@@ -1227,7 +1306,7 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
                           borderRadius: BorderRadius.circular(26),
                         ),
                       ),
-                      onPressed: _isSaving ? null : () => Navigator.of(context).pop(),
+                      onPressed: _isBusy ? null : () => Navigator.of(context).pop(),
                       child: const Text('Cancel'),
                     ),
                   ),
@@ -1243,7 +1322,7 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
                           borderRadius: BorderRadius.circular(26),
                         ),
                       ),
-                      onPressed: _isSaving ? null : _savePlant,
+                      onPressed: _isBusy ? null : _savePlant,
                       child: _isSaving
                           ? const SizedBox(
                               height: 18,
@@ -1258,6 +1337,41 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
                   ),
                 ],
               ),
+
+              // Secondary Destructive Action: Remove Active Plant
+              if (isUpdating) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton.icon(
+                    onPressed: _isBusy ? null : _confirmAndRemovePlant,
+                    icon: _isDeleting
+                        ? const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Color(0xFFC0392B),
+                            ),
+                          )
+                        : const Icon(Icons.delete_outline_rounded, color: Color(0xFFC0392B), size: 18),
+                    label: const Text(
+                      'Remove Active Plant',
+                      style: TextStyle(
+                        color: Color(0xFFC0392B),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'screens/home_tab.dart'; 
+import 'screens/home_tab.dart';
 import 'screens/data_tab.dart';
 import 'screens/userprofile_tab.dart';
-import 'screens/login_screen.dart'; 
-import 'screens/ai_tab.dart'; 
+import 'screens/login_screen.dart';
+import 'screens/ai_tab.dart';
 import 'screens/control_tab.dart';
 import 'screens/notifications_screen.dart';
 
@@ -14,8 +14,8 @@ Future<void> main() async {
 
   // Initialize Supabase with the unique keys
   await Supabase.initialize(
-    url: 'https://reszkykrwtcvnvpcmdzj.supabase.co', 
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlc3preWtyd3Rjdm52cGNtZHpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3ODQ0NjgsImV4cCI6MjA5MDM2MDQ2OH0.Gm4S2tqhU1A0oLC6-5qs9MFlj5WzUFP2eHt2pL90DI0',                   
+    url: 'https://reszkykrwtcvnvpcmdzj.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlc3preWtyd3Rjdm52cGNtZHpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3ODQ0NjgsImV4cCI6MjA5MDM2MDQ2OH0.Gm4S2tqhU1A0oLC6-5qs9MFlj5WzUFP2eHt2pL90DI0',
   );
 
   runApp(const SmartGreenhouseApp());
@@ -32,7 +32,7 @@ class SmartGreenhouseApp extends StatelessWidget {
       theme: ThemeData(
         scaffoldBackgroundColor: const Color(0xFFEDF7F0),
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        fontFamily: 'Manrope', 
+        fontFamily: 'Manrope',
       ),
       home: const DashboardScreen(),
     );
@@ -47,8 +47,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final GlobalKey<HomeTabState> _homeKey = GlobalKey<HomeTabState>();
+
   int _selectedIndex = 0;
-  
   late bool _isLoggedIn;
 
   // Dynamically check Supabase on load
@@ -62,53 +63,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final List<Widget> pages = [
       HomeTab(
+        key: _homeKey,
         isLoggedIn: _isLoggedIn,
         onNavigateToAI: () {
           setState(() {
             _selectedIndex = 1; // Index 1 is the AI tab!
           });
         },
-      ),      AITab(isLoggedIn: _isLoggedIn), 
-      ControlsTab(isLoggedIn: _isLoggedIn),       
-      DataTab(isLoggedIn: _isLoggedIn),        
-      SettingsTab(isLoggedIn: _isLoggedIn),
+      ),
+      AITab(isLoggedIn: _isLoggedIn),
+      ControlsTab(isLoggedIn: _isLoggedIn),
+      DataTab(isLoggedIn: _isLoggedIn),
+      SettingsTab(
+        isLoggedIn: _isLoggedIn,
+        onProfileUpdated: () => _homeKey.currentState?.refreshData(),
+        onPlantChanged: () => _homeKey.currentState?.refreshData(),
+      ),
     ];
 
     return Scaffold(
       backgroundColor: const Color(0xFFEDF7F0),
       appBar: AppBar(
-        toolbarHeight: 70, 
+        toolbarHeight: 70,
         backgroundColor: Colors.white.withOpacity(0.9),
         elevation: 0,
         title: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Image.asset(
-              'assets/logo.png', 
-              width: 50, 
+              'assets/logo.png',
+              width: 50,
               height: 40,
               fit: BoxFit.contain,
-            ), 
+            ),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Text(
-                  'SensorHub AI', 
-                  style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.w900, fontSize: 18)
+                  'SensorHub AI',
+                  style: TextStyle(color: Color(0xFF064E3B), fontWeight: FontWeight.w900, fontSize: 18),
                 ),
                 Row(
                   children: [
                     Icon(Icons.circle, color: _isLoggedIn ? Colors.green : Colors.grey.shade400, size: 8),
                     const SizedBox(width: 4),
                     Text(
-                      _isLoggedIn ? 'SYSTEM LIVE' : 'SYSTEM OFFLINE', 
+                      _isLoggedIn ? 'SYSTEM LIVE' : 'SYSTEM OFFLINE',
                       style: TextStyle(
-                        color: _isLoggedIn ? Colors.green : Colors.grey.shade500, 
-                        fontSize: 10, 
-                        fontWeight: FontWeight.bold, 
-                        letterSpacing: 1.2
-                      )
+                        color: _isLoggedIn ? Colors.green : Colors.grey.shade500,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                      ),
                     ),
                   ],
                 ),
@@ -126,11 +133,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Padding(
             padding: const EdgeInsets.only(right: 16.0),
             child: PopupMenuButton<String>(
-              offset: const Offset(0, 45), 
+              offset: const Offset(0, 45),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               color: Colors.white,
-              // ⭐ UPDATED: Added async and Supabase sign out logic
-onSelected: (String value) async {
+              onSelected: (String value) async {
                 if (value == 'logout') {
                   await Supabase.instance.client.auth.signOut();
                   if (mounted) {
@@ -143,13 +149,13 @@ onSelected: (String value) async {
                   }
                 } else if (value == 'login') {
                   Navigator.pushReplacement(
-                    context, 
-                    MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true))
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true)),
                   );
                 } else if (value == 'signup') {
                   Navigator.pushReplacement(
-                    context, 
-                    MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: false))
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: false)),
                   );
                 } else if (value == 'switch_account') {
                   await Supabase.instance.client.auth.signOut();
@@ -158,8 +164,8 @@ onSelected: (String value) async {
                       const SnackBar(content: Text('Logged out successfully.'), backgroundColor: Colors.green),
                     );
                     Navigator.pushReplacement(
-                      context, 
-                      MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true))
+                      context,
+                      MaterialPageRoute(builder: (context) => const LoginScreen(initialIsLogin: true)),
                     );
                   }
                 }
@@ -222,19 +228,17 @@ onSelected: (String value) async {
           )
         ],
       ),
-      
       body: IndexedStack(
         index: _selectedIndex,
         children: pages,
       ),
-
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, -4))],
         ),
         child: BottomNavigationBar(
           currentIndex: _selectedIndex,
-          type: BottomNavigationBarType.fixed, 
+          type: BottomNavigationBarType.fixed,
           backgroundColor: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.9),
           selectedItemColor: const Color.fromARGB(255, 73, 255, 82),
           unselectedItemColor: const Color.fromARGB(255, 253, 253, 253),
@@ -246,6 +250,9 @@ onSelected: (String value) async {
             setState(() {
               _selectedIndex = index;
             });
+            if (index == 0) {
+              _homeKey.currentState?.refreshData();
+            }
           },
           items: const [
             BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'HOME'),

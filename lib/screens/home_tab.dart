@@ -20,6 +20,7 @@ class HomeTabState extends State<HomeTab> {
 
   StreamSubscription? _sensorSubscription;
   StreamSubscription? _healthSubscription;
+  StreamSubscription? _plantSubscription;
 
   String _fetchedUserName = 'Loading...';
   String _fetchedLocation = 'Loading...';
@@ -29,7 +30,7 @@ class HomeTabState extends State<HomeTab> {
   Map<String, dynamic>? _activePlant;
   bool _isLoadingPlant = true;
 
-  // Synced Health Score & AI commentary from `public.ai_insights`
+  // Synced Health Score from `public.ai_insights`
   int _healthIndex = 100;
 
   // Live telemetry values from physical sensors (filtered by user_id)
@@ -68,14 +69,35 @@ class HomeTabState extends State<HomeTab> {
     }
   }
 
+  @override
+  void didUpdateWidget(covariant HomeTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isLoggedIn && !oldWidget.isLoggedIn) {
+      refreshData();
+    } else if (!widget.isLoggedIn && oldWidget.isLoggedIn) {
+      _sensorSubscription?.cancel();
+      _healthSubscription?.cancel();
+      _plantSubscription?.cancel();
+      setState(() {
+        _hasProfileData = false;
+        _activePlant = null;
+        _liveTemp = null;
+        _liveHumidity = null;
+        _liveLight = null;
+        _liveMoisture = null;
+        _livePh = null;
+        _isLoadingTelemetry = false;
+        _isLoadingPlant = false;
+      });
+    }
+  }
+
   /// Public method so `main.dart` can refresh HomeTab immediately when
-  /// the user updates their profile or changes their plant in SettingsTab.
+  /// the user updates their profile or changes/deletes their plant in SettingsTab.
   Future<void> refreshData() async {
     if (!widget.isLoggedIn) return;
-    await Future.wait([
-      _fetchUserProfile(),
-      _fetchUserPlant(),
-    ]);
+    await _fetchUserProfile();
+    _setupPlantStream();
     _setupSensorStream();
     _setupHealthScoreStream();
   }
@@ -171,33 +193,35 @@ class HomeTabState extends State<HomeTab> {
     }
   }
 
-  // Fetches the user's active plant from `public.user_plants`
-  Future<void> _fetchUserPlant() async {
-    try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) {
-        if (mounted) {
-          setState(() {
-            _activePlant = null;
-            _isLoadingPlant = false;
-          });
-        }
-        return;
+  // Fetches and listens to the user's active plant in `public.user_plants`
+  void _setupPlantStream() {
+    _plantSubscription?.cancel();
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) {
+      if (mounted) {
+        setState(() {
+          _activePlant = null;
+          _isLoadingPlant = false;
+        });
       }
+      return;
+    }
 
-      final plantData = await Supabase.instance.client
-          .from('user_plants')
-          .select('plant_name, harvest_days, planted_date')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
+    // Immediate fetch
+    Supabase.instance.client
+        .from('user_plants')
+        .select('plant_name, harvest_days, planted_date')
+        .eq('user_id', user.id)
+        .maybeSingle()
+        .then((plantData) {
       if (mounted) {
         setState(() {
           _activePlant = plantData;
           _isLoadingPlant = false;
         });
       }
-    } catch (e) {
+    }).catchError((e) {
       debugPrint('HomeTab User Plant Error: $e');
       if (mounted) {
         setState(() {
@@ -205,16 +229,29 @@ class HomeTabState extends State<HomeTab> {
           _isLoadingPlant = false;
         });
       }
-    }
+    });
+
+    // Real-time listener for inserts, updates, and deletes
+    _plantSubscription = Supabase.instance.client
+        .from('user_plants')
+        .stream(primaryKey: ['id'])
+        .eq('user_id', user.id)
+        .listen((records) {
+      if (!mounted) return;
+      setState(() {
+        _activePlant = records.isNotEmpty ? records.first : null;
+        _isLoadingPlant = false;
+      });
+    });
   }
 
-  // Fetches and listens to the AI Health Index & AI notes in real time
+  // Fetches and listens to the AI Health Index in real time
   void _setupHealthScoreStream() {
     _healthSubscription?.cancel();
 
     Supabase.instance.client
         .from('ai_insights')
-        .select('health_index, growth_forecast')
+        .select('health_index')
         .eq('id', 1)
         .maybeSingle()
         .then((data) {
@@ -422,6 +459,7 @@ class HomeTabState extends State<HomeTab> {
   void dispose() {
     _sensorSubscription?.cancel();
     _healthSubscription?.cancel();
+    _plantSubscription?.cancel();
     _scrollController.dispose();
     super.dispose();
   }
