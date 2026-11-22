@@ -14,10 +14,10 @@ class DataTab extends StatefulWidget {
   const DataTab({super.key, this.isLoggedIn = true});
 
   @override
-  State<DataTab> createState() => _DataTabState();
+  State<DataTab> createState() => DataTabState();
 }
 
-class _DataTabState extends State<DataTab> {
+class DataTabState extends State<DataTab> {
   final ScrollController _mainScroll = ScrollController();
   final ScrollController _tableVerticalScroll = ScrollController();
   final ScrollController _tableHorizontalScroll = ScrollController();
@@ -61,10 +61,7 @@ class _DataTabState extends State<DataTab> {
   void initState() {
     super.initState();
     if (widget.isLoggedIn) {
-      _checkProfileStatus().then((_) {
-        _fetchHistoricalData();
-        _setupDataStream();
-      });
+      refreshData();
     } else {
       _isLoadingData = false;
     }
@@ -74,10 +71,7 @@ class _DataTabState extends State<DataTab> {
   void didUpdateWidget(covariant DataTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.isLoggedIn && !oldWidget.isLoggedIn) {
-      _checkProfileStatus().then((_) {
-        _fetchHistoricalData();
-        _setupDataStream();
-      });
+      refreshData();
     } else if (!widget.isLoggedIn && oldWidget.isLoggedIn) {
       _dataStreamSub?.cancel();
       setState(() {
@@ -86,6 +80,15 @@ class _DataTabState extends State<DataTab> {
         _isLoadingData = false;
       });
     }
+  }
+
+  /// Public method so `main.dart` can refresh DataTab immediately when
+  /// the user updates their profile or switches to the Data tab.
+  Future<void> refreshData() async {
+    if (!widget.isLoggedIn) return;
+    await _checkProfileStatus();
+    await _fetchHistoricalData();
+    _setupDataStream();
   }
 
   @override
@@ -110,7 +113,9 @@ class _DataTabState extends State<DataTab> {
 
       if (mounted) {
         setState(() {
-          _hasProfileData = data != null && data['username'] != null && data['username'].toString().trim().isNotEmpty;
+          _hasProfileData = data != null &&
+              data['username'] != null &&
+              data['username'].toString().trim().isNotEmpty;
         });
       }
     } catch (e) {
@@ -145,7 +150,8 @@ class _DataTabState extends State<DataTab> {
 
     if (_rawSensorData.isEmpty) {
       setState(() {
-        _aiTrendInsight = "No sensor data in database for this account yet. AI insights will appear once your ESP32 uploads telemetry.";
+        _aiTrendInsight =
+            "No sensor data in database for this account yet. AI insights will appear once your ESP32 uploads telemetry.";
         _isAnalyzingTrend = false;
       });
       return;
@@ -331,7 +337,14 @@ class _DataTabState extends State<DataTab> {
           );
         }
       } else {
-        throw Exception('Email server error: ${emailRes.body}');
+        String errorDetail = emailRes.body;
+        try {
+          final parsed = jsonDecode(emailRes.body);
+          if (parsed is Map && parsed['detail'] != null) {
+            errorDetail = parsed['detail'].toString();
+          }
+        } catch (_) {}
+        throw Exception(errorDetail);
       }
     } catch (e) {
       debugPrint('PDF Export Error: $e');
