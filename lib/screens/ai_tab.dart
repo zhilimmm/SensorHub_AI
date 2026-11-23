@@ -360,14 +360,13 @@ class _AITabState extends State<AITab> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              'AI Suggestions',
+              'AI Recommendations',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
                 color: _isAiReady ? const Color(0xFF2C2F30) : Colors.grey.shade500,
               ),
             ),
-            Text('Scikit-Learn', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
           ],
         ),
         const SizedBox(height: 16),
