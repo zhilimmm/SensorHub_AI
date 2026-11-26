@@ -720,15 +720,19 @@ class _SettingsTabState extends State<SettingsTab> {
           child: OutlinedButton.icon(
             onPressed: _openPlantSelectorDialog,
             icon: Icon(Icons.eco_rounded, color: _darkGreen, size: 20),
-            label: Text(
-              plantButtonLabel,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(color: _darkGreen, fontSize: 14, fontWeight: FontWeight.bold),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                plantButtonLabel,
+                maxLines: 1,
+                style: TextStyle(color: _darkGreen, fontSize: 13.5, fontWeight: FontWeight.bold),
+              ),
             ),
             style: OutlinedButton.styleFrom(
               backgroundColor: Colors.white,
               side: const BorderSide(color: Colors.white, width: 3),
               elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
             ),
           ),
@@ -1155,30 +1159,39 @@ class _PlantSelectorDialogState extends State<PlantSelectorDialog> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Target Planting Cycle',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _darkGreen,
+                        const Expanded(
+                          child: Text(
+                            'Target Planting Cycle',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: _darkGreen,
+                            ),
                           ),
                         ),
-                        if (_selectedPreset != null)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: _accentGreen.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'Suggested: ${_selectedPreset!.suggestedDays} days',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: _darkGreen,
+                        if (_selectedPreset != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: _accentGreen.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  'Suggested: ${_selectedPreset!.suggestedDays} days',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: _darkGreen,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 10),
