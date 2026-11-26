@@ -564,16 +564,18 @@ class DataTabState extends State<DataTab> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildHeaderSection(),
               const SizedBox(height: 20),
               _buildParametersCard(),
-              const SizedBox(height: 20),
-              _buildFilterAndExportRow(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              _buildDateFilterRow(),
+              const SizedBox(height: 16),
               _buildChartCard(),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+              _buildExportReportButton(),
+              const SizedBox(height: 16),
               _buildMetricLogTable(),
               const SizedBox(height: 40),
             ],
@@ -615,52 +617,51 @@ class DataTabState extends State<DataTab> {
     );
   }
 
-  Widget _buildFilterAndExportRow() {
+  Widget _buildDateFilterRow() {
+    final bool hasCustom = _customDateRange != null && _isDataActive;
+    return Row(
+      children: [
+        Expanded(child: _buildDateChip('Last 7 Days')),
+        const SizedBox(width: 10),
+        Expanded(child: _buildDateChip('Last 30 Days')),
+        if (hasCustom) ...[
+          const SizedBox(width: 10),
+          Expanded(child: _buildDateChip(_selectedDateRange)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildExportReportButton() {
     final bool canExport =
         _isDataActive && _rawSensorData.isNotEmpty && !_isExporting;
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Expanded(
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildDateChip('Last 7 Days'),
-                const SizedBox(width: 8),
-                _buildDateChip('Last 30 Days'),
-                if (_customDateRange != null && _isDataActive) ...[
-                  const SizedBox(width: 8),
-                  _buildDateChip(_selectedDateRange),
-                ]
-              ],
-            ),
-          ),
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: canExport ? _exportPdfReport : null,
+        icon: _isExporting
+            ? const SizedBox(
+                width: 15,
+                height: 15,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2, color: Colors.white),
+              )
+            : const Icon(Icons.ios_share_rounded, size: 17),
+        label: Text(
+          _isExporting ? 'Exporting Report...' : 'Export Report',
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
         ),
-        const SizedBox(width: 12),
-        ElevatedButton(
-          onPressed: canExport ? _exportPdfReport : null,
-          style: ElevatedButton.styleFrom(
-            backgroundColor:
-                canExport ? const Color(0xFF065F46) : Colors.grey.shade300,
-            foregroundColor: canExport ? Colors.white : Colors.grey.shade500,
-            elevation: canExport ? 3 : 0,
-            shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          ),
-          child: _isExporting
-              ? const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Export Report',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-        )
-      ],
+        style: ElevatedButton.styleFrom(
+          backgroundColor:
+              canExport ? const Color(0xFF065F46) : Colors.grey.shade300,
+          foregroundColor: canExport ? Colors.white : Colors.grey.shade500,
+          elevation: canExport ? 2 : 0,
+          shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+        ),
+      ),
     );
   }
 
@@ -679,38 +680,41 @@ class DataTabState extends State<DataTab> {
             }
           : null,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
         decoration: BoxDecoration(
           color: isSelected
               ? Colors.green.shade50
               : (_isDataActive
-                  ? Colors.white.withOpacity(0.8)
+                  ? Colors.white.withOpacity(0.9)
                   : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(
               color: isSelected ? Colors.green.shade400 : Colors.grey.shade300),
         ),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (isSelected) ...[
-              Icon(Icons.check_circle, color: Colors.green.shade700, size: 14),
-              const SizedBox(width: 6),
-            ] else ...[
-              Icon(Icons.calendar_today,
-                  color: _isDataActive ? Colors.green.shade700 : Colors.grey,
-                  size: 14),
-              const SizedBox(width: 6),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                color: _isDataActive
-                    ? (isSelected
-                        ? Colors.green.shade800
-                        : const Color(0xFF064E3B))
-                    : Colors.grey,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
+            Icon(
+              isSelected ? Icons.check_circle : Icons.calendar_today,
+              color: _isDataActive ? Colors.green.shade700 : Colors.grey,
+              size: 14,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: _isDataActive
+                        ? (isSelected
+                            ? Colors.green.shade800
+                            : const Color(0xFF064E3B))
+                        : Colors.grey,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12.5,
+                  ),
+                ),
               ),
             ),
           ],
@@ -1730,15 +1734,14 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
             ),
             const SizedBox(height: 18),
             const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                SizedBox(width: 40, child: Text('Sun', textAlign: TextAlign.center, style: weekHeaderStyle)),
-                SizedBox(width: 40, child: Text('Mon', textAlign: TextAlign.center, style: weekHeaderStyle)),
-                SizedBox(width: 40, child: Text('Tue', textAlign: TextAlign.center, style: weekHeaderStyle)),
-                SizedBox(width: 40, child: Text('Wed', textAlign: TextAlign.center, style: weekHeaderStyle)),
-                SizedBox(width: 40, child: Text('Thu', textAlign: TextAlign.center, style: weekHeaderStyle)),
-                SizedBox(width: 40, child: Text('Fri', textAlign: TextAlign.center, style: weekHeaderStyle)),
-                SizedBox(width: 40, child: Text('Sat', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                Expanded(child: Text('Sun', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                Expanded(child: Text('Mon', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                Expanded(child: Text('Tue', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                Expanded(child: Text('Wed', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                Expanded(child: Text('Thu', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                Expanded(child: Text('Fri', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                Expanded(child: Text('Sat', textAlign: TextAlign.center, style: weekHeaderStyle)),
               ],
             ),
             const SizedBox(height: 8),
