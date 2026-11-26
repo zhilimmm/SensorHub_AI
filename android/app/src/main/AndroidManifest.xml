@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="ai_driven_smart_greenhouse_plant_care_system"
         android:name="${applicationName}"
