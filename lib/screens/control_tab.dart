@@ -69,17 +69,14 @@ class _ControlsTabState extends State<ControlsTab> {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
-      // 1. Re-check profile status
       await _checkProfileStatus();
 
-      // 2. Fetch latest actuator control states directly
       final controlRecord = await Supabase.instance.client
           .from('device_controls')
           .select()
           .eq('id', 1)
           .maybeSingle();
 
-      // 3. Fetch latest sensor & AI prediction telemetry for this user
       final sensorRecord = await Supabase.instance.client
           .from('sweet_potato_leave_data')
           .select()
@@ -108,7 +105,6 @@ class _ControlsTabState extends State<ControlsTab> {
         });
       }
 
-      // 4. Re-initialize realtime streams in case a websocket dropped
       _setupRealtimeStreams();
     } catch (e) {
       debugPrint("Error refreshing ControlsTab: $e");
@@ -166,7 +162,6 @@ class _ControlsTabState extends State<ControlsTab> {
       }
     });
 
-    // Listen only to telemetry belonging to the logged-in user's `user_id`
     _sensorSub = Supabase.instance.client
         .from('sweet_potato_leave_data')
         .stream(primaryKey: ['id'])
@@ -280,37 +275,28 @@ class _ControlsTabState extends State<ControlsTab> {
       child: RefreshIndicator(
         color: const Color(0xFF005A3C),
         onRefresh: _refreshAll,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24.0,
-                      vertical: 16.0,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildTopTitles(),
-                        if (_isActive) _buildAutomationBanner(),
-                        const Spacer(flex: 2),
-                        _buildGrid(),
-                        const Spacer(flex: 2),
-                        _buildStatsRow(),
-                        const Spacer(flex: 2),
-                        _buildEmergencyStop(),
-                        const Spacer(flex: 1),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 20.0,
+            vertical: 16.0,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTopTitles(),
+              if (_isActive) ...[
+                _buildAutomationBanner(),
+                const SizedBox(height: 18),
+              ],
+              _buildGrid(),
+              const SizedBox(height: 18),
+              _buildStatsRow(),
+              const SizedBox(height: 22),
+              _buildEmergencyStop(),
+              const SizedBox(height: 28),
+            ],
+          ),
         ),
       ),
     );
@@ -319,38 +305,33 @@ class _ControlsTabState extends State<ControlsTab> {
   Widget _buildTopTitles() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.only(top: 16, bottom: 24),
-      child: Stack(
-        alignment: Alignment.center,
+      padding: const EdgeInsets.only(top: 10, bottom: 22),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                'SYSTEM CONTROLS',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                  color: _isHardwareReady
-                      ? const Color(0xFF005A3C)
-                      : Colors.grey.shade500,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Hardware Interface',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w900,
-                  color: _isHardwareReady
-                      ? const Color(0xFF022C22)
-                      : Colors.grey.shade700,
-                  height: 1.1,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
+          Text(
+            'SYSTEM CONTROLS',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+              color: _isHardwareReady
+                  ? const Color(0xFF005A3C)
+                  : Colors.grey.shade500,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Hardware Interface',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+              color: _isHardwareReady
+                  ? const Color(0xFF022C22)
+                  : Colors.grey.shade700,
+              height: 1.1,
+            ),
+            textAlign: TextAlign.center,
           ),
         ],
       ),
@@ -361,11 +342,18 @@ class _ControlsTabState extends State<ControlsTab> {
     if (!_hasHardwareData) {
       return Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            )
+          ],
         ),
         child: Row(
           children: [
@@ -400,13 +388,13 @@ class _ControlsTabState extends State<ControlsTab> {
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
         color: _automationActive ? Colors.white : const Color(0xFFFFF7ED),
         border: Border.all(
           color:
-              _automationActive ? Colors.transparent : const Color(0xFFF6AD55),
-          width: 2,
+              _automationActive ? Colors.grey.shade200 : const Color(0xFFF6AD55),
+          width: _automationActive ? 1 : 2,
         ),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
@@ -462,7 +450,7 @@ class _ControlsTabState extends State<ControlsTab> {
               onPressed: () => _setAutomationMode(true),
               style: TextButton.styleFrom(
                 backgroundColor: const Color(0xFFDD6B20),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 14),
               ),
               child: const Text(
                 "RESUME AI",
@@ -488,7 +476,7 @@ class _ControlsTabState extends State<ControlsTab> {
             Icons.water_drop,
             Colors.blue,
             Colors.blue.shade50,
-            190,
+            185,
             _autoPumpOn,
             _manualPumpOn,
             (val) => _toggleDevice('pump_manual_override', val),
@@ -502,7 +490,7 @@ class _ControlsTabState extends State<ControlsTab> {
             Icons.air,
             Colors.green,
             Colors.cyan.shade50,
-            190,
+            185,
             _autoFanOn,
             _manualFanOn,
             (val) => _toggleDevice('fan_manual_override', val),
@@ -532,7 +520,7 @@ class _ControlsTabState extends State<ControlsTab> {
     Color statusColor = !_isHardwareReady
         ? Colors.grey.shade400
         : (_automationActive
-            ? (autoState ? const Color(0xFFED8936) : Colors.grey.shade400)
+            ? (autoState ? const Color(0xFFED8936) : Colors.grey.shade500)
             : (manualState ? iconColor.shade700 : Colors.grey.shade500));
 
     return Container(
@@ -540,9 +528,14 @@ class _ControlsTabState extends State<ControlsTab> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _isHardwareReady && displayState ? bgColor : Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade200),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8)
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
         ],
       ),
       child: Column(
@@ -610,25 +603,27 @@ class _ControlsTabState extends State<ControlsTab> {
   }
 
   Widget _buildStatsRow() {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: _buildInfoCard(
-            'Pump Output',
-            '1 manual press dispenses 15-20ml over 5 seconds.',
-            Colors.blue,
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _buildInfoCard(
+              'Pump Output',
+              '1 manual press dispenses 15-20ml over 5 seconds.',
+              Colors.blue,
+            ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: _buildInfoCard(
-            'Climate Control',
-            'Three 5V fans regulate system humidity and temp.',
-            Colors.green,
+          const SizedBox(width: 16),
+          Expanded(
+            child: _buildInfoCard(
+              'Climate Control',
+              'Three 5V fans regulate system humidity and temp.',
+              Colors.green,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -636,7 +631,17 @@ class _ControlsTabState extends State<ControlsTab> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-          color: Colors.white, borderRadius: BorderRadius.circular(12)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          )
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -645,17 +650,20 @@ class _ControlsTabState extends State<ControlsTab> {
               CircleAvatar(
                   radius: 4,
                   backgroundColor: _isHardwareReady ? dotColor : Colors.grey),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
-                child: Text(
-                  title.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.grey.shade500,
-                    letterSpacing: 1,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    title.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade600,
+                      letterSpacing: 0.7,
+                    ),
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
@@ -664,7 +672,7 @@ class _ControlsTabState extends State<ControlsTab> {
           Text(
             text,
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 11.5,
               fontWeight: FontWeight.w600,
               color: _isHardwareReady
                   ? const Color(0xFF2C2F30)
@@ -679,12 +687,12 @@ class _ControlsTabState extends State<ControlsTab> {
 
   Widget _buildEmergencyStop() {
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         color: _isHardwareReady
             ? const Color(0xFFF95630).withOpacity(0.1)
             : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: _isHardwareReady
               ? const Color(0xFFF95630).withOpacity(0.3)
@@ -735,7 +743,7 @@ class _ControlsTabState extends State<ControlsTab> {
               )
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             height: 50,
