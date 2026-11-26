@@ -797,61 +797,9 @@ class HomeTabState extends State<HomeTab> {
       return 'optimal';
     }
 
-    List<Widget> telemetryPills;
-
-    if (isTelemetryActive) {
-      telemetryPills = [
-        _buildTelemetryPill(
-          'MOIST',
-          _liveMoisture != null ? '$_liveMoisture%' : '--',
-          Icons.water_drop,
-          getMoistStatus(_liveMoisture),
-        ),
-        const SizedBox(width: 8),
-        _buildTelemetryPill(
-          'LUX',
-          _liveLight != null ? '${_liveLight!}' : '--',
-          Icons.light_mode,
-          'optimal',
-        ),
-        const SizedBox(width: 8),
-        _buildTelemetryPill(
-          'TEMP',
-          _liveTemp != null ? '${_liveTemp!.toStringAsFixed(1)}°' : '--',
-          Icons.thermostat,
-          getTempStatus(_liveTemp),
-        ),
-        const SizedBox(width: 8),
-        _buildTelemetryPill(
-          'PH',
-          _livePh != null ? _livePh!.toStringAsFixed(1) : '--',
-          Icons.science,
-          getPhStatus(_livePh),
-        ),
-        const SizedBox(width: 8),
-        _buildTelemetryPill(
-          'HUMID',
-          _liveHumidity != null ? '${_liveHumidity!.toStringAsFixed(0)}%' : '--',
-          Icons.air,
-          getHumidStatus(_liveHumidity),
-        ),
-      ];
-    } else {
-      telemetryPills = [
-        _buildTelemetryPill('MOIST', '--', Icons.water_drop, 'idle'),
-        const SizedBox(width: 8),
-        _buildTelemetryPill('LUX', '--', Icons.light_mode, 'idle'),
-        const SizedBox(width: 8),
-        _buildTelemetryPill('TEMP', '--', Icons.thermostat, 'idle'),
-        const SizedBox(width: 8),
-        _buildTelemetryPill('PH', '--', Icons.science, 'idle'),
-        const SizedBox(width: 8),
-        _buildTelemetryPill('HUMID', '--', Icons.air, 'idle'),
-      ];
-    }
-
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -875,14 +823,54 @@ class HomeTabState extends State<HomeTab> {
               letterSpacing: 2,
             ),
           ),
-          const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            clipBehavior: Clip.none,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: telemetryPills,
-            ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _buildTelemetryPill(
+                  'MOIST',
+                  isTelemetryActive && _liveMoisture != null ? '$_liveMoisture%' : '--',
+                  Icons.water_drop,
+                  isTelemetryActive ? getMoistStatus(_liveMoisture) : 'idle',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildTelemetryPill(
+                  'LUX',
+                  isTelemetryActive && _liveLight != null ? '${_liveLight!}' : '--',
+                  Icons.light_mode,
+                  isTelemetryActive ? 'optimal' : 'idle',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildTelemetryPill(
+                  'TEMP',
+                  isTelemetryActive && _liveTemp != null ? '${_liveTemp!.toStringAsFixed(1)}°' : '--',
+                  Icons.thermostat,
+                  isTelemetryActive ? getTempStatus(_liveTemp) : 'idle',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildTelemetryPill(
+                  'PH',
+                  isTelemetryActive && _livePh != null ? _livePh!.toStringAsFixed(1) : '--',
+                  Icons.science,
+                  isTelemetryActive ? getPhStatus(_livePh) : 'idle',
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _buildTelemetryPill(
+                  'HUMID',
+                  isTelemetryActive && _liveHumidity != null ? '${_liveHumidity!.toStringAsFixed(0)}%' : '--',
+                  Icons.air,
+                  isTelemetryActive ? getHumidStatus(_liveHumidity) : 'idle',
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 16),
           if (isProfileActive && !isTelemetryActive)
@@ -932,26 +920,48 @@ class HomeTabState extends State<HomeTab> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
       decoration: BoxDecoration(
         color: bgColor,
-        borderRadius: BorderRadius.circular(40),
-        boxShadow: [BoxShadow(color: bgColor.withOpacity(0.3), blurRadius: 6, offset: const Offset(0, 3))],
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [BoxShadow(color: bgColor.withOpacity(0.28), blurRadius: 5, offset: const Offset(0, 3))],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.95),
-              shape: BoxShape.circle,
+          AspectRatio(
+            aspectRatio: 1,
+            child: Container(
+              margin: const EdgeInsets.all(2),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.95),
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Icon(icon, color: bgColor, size: 18),
+              ),
             ),
-            child: Icon(icon, color: bgColor, size: 20),
           ),
           const SizedBox(height: 8),
-          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.white)),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.white)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                value,
+                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: Colors.white),
+              ),
+            ),
+          ),
+          const SizedBox(height: 6),
         ],
       ),
     );
