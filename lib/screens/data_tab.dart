@@ -47,7 +47,7 @@ class DataTabState extends State<DataTab> {
 
   bool get _isDataActive => widget.isLoggedIn && _hasProfileData;
 
-  final Map<String, Color> _paramColors = {
+  final Map _paramColors = {
     'Light': Colors.amber.shade600,
     'Humidity': Colors.blue.shade500,
     'pH Value': Colors.purple.shade400,
@@ -55,7 +55,8 @@ class DataTabState extends State<DataTab> {
     'Temperature': Colors.redAccent.shade400,
   };
 
-  bool get _isAllSelected => _showLight && _showHumidity && _showPh && _showMoisture && _showTemp;
+  bool get _isAllSelected =>
+      _showLight && _showHumidity && _showPh && _showMoisture && _showTemp;
 
   @override
   void initState() {
@@ -82,8 +83,6 @@ class DataTabState extends State<DataTab> {
     }
   }
 
-  /// Public method so `main.dart` can refresh DataTab immediately when
-  /// the user updates their profile or switches to the Data tab.
   Future<void> refreshData() async {
     if (!widget.isLoggedIn) return;
     await _checkProfileStatus();
@@ -123,7 +122,6 @@ class DataTabState extends State<DataTab> {
     }
   }
 
-  // Maps UI checkboxes to Python FastAPI sensor keys
   List _getSelectedApiKeys() {
     final keys = [];
     if (_showLight) keys.add('light');
@@ -134,7 +132,6 @@ class DataTabState extends State<DataTab> {
     return keys;
   }
 
-  // Calls FastAPI /api/analyze-trend to get scenario-based insight
   Future<void> _fetchTrendInsight() async {
     if (!mounted) return;
 
@@ -169,17 +166,21 @@ class DataTabState extends State<DataTab> {
     setState(() => _isAnalyzingTrend = true);
 
     try {
-      final cleanPoints = _rawSensorData.map((row) {
-        final point = {};
-        for (final key in selectedKeys) {
-          if (row[key] != null && row[key] is num) {
-            point[key] = (row[key] as num).toDouble();
-          }
-        }
-        return point;
-      }).where((pt) => pt.isNotEmpty).toList();
+      final cleanPoints = _rawSensorData
+          .map((row) {
+            final point = {};
+            for (final key in selectedKeys) {
+              if (row[key] != null && row[key] is num) {
+                point[key] = (row[key] as num).toDouble();
+              }
+            }
+            return point;
+          })
+          .where((pt) => pt.isNotEmpty)
+          .toList();
 
-      final url = Uri.parse('https://sensorhub-ai-backend.onrender.com/api/analyze-trend');
+      final url = Uri.parse(
+          'https://sensorhub-ai-backend.onrender.com/api/analyze-trend');
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
@@ -193,7 +194,8 @@ class DataTabState extends State<DataTab> {
         final decoded = jsonDecode(response.body);
         if (mounted) {
           setState(() {
-            _aiTrendInsight = decoded['insight'] ?? 'Unable to generate insight.';
+            _aiTrendInsight =
+                decoded['insight'] ?? 'Unable to generate insight.';
             _isAnalyzingTrend = false;
           });
         }
@@ -204,18 +206,19 @@ class DataTabState extends State<DataTab> {
       debugPrint("Trend Insight API Error: $e");
       if (mounted) {
         setState(() {
-          _aiTrendInsight = "Could not reach AI backend. Make sure your FastAPI server is running.";
+          _aiTrendInsight =
+              "Could not reach AI backend. Make sure your FastAPI server is running.";
           _isAnalyzingTrend = false;
         });
       }
     }
   }
 
-  // Exports a PDF report with the selected parameters' chart, AI Insight, and logs
   Future<void> _exportPdfReport() async {
     if (!_isDataActive || _rawSensorData.isEmpty || _activeParams.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one parameter with data to export.')),
+        const SnackBar(
+            content: Text('Select at least one parameter with data to export.')),
       );
       return;
     }
@@ -223,12 +226,14 @@ class DataTabState extends State<DataTab> {
     setState(() => _isExporting = true);
 
     try {
-      final boundary = _chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary = _chartKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
       ui.Image? chartImage;
       if (boundary != null) {
         chartImage = await boundary.toImage(pixelRatio: 3.0);
       }
-      final byteData = await chartImage?.toByteData(format: ui.ImageByteFormat.png);
+      final byteData =
+          await chartImage?.toByteData(format: ui.ImageByteFormat.png);
       final chartBytes = byteData?.buffer.asUint8List();
 
       final pdf = pw.Document();
@@ -242,20 +247,29 @@ class DataTabState extends State<DataTab> {
             return [
               pw.Text(
                 'SensorHub AI - Telemetry Report',
-                style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.green900),
+                style: pw.TextStyle(
+                    fontSize: 20,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.green900),
               ),
               pw.SizedBox(height: 4),
               pw.Text(
                 'Date Range: $_selectedDateRange  |  Generated: ${DateFormat('MMM dd, yyyy HH:mm').format(DateTime.now())}',
-                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+                style: const pw.TextStyle(
+                    fontSize: 10, color: PdfColors.grey700),
               ),
               pw.Text(
                 'Selected Parameters: ${_activeParams.join(', ')}',
-                style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColors.green800),
+                style: pw.TextStyle(
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColors.green800),
               ),
               pw.Divider(height: 20),
               if (chartBytes != null) ...[
-                pw.Text('Sensor Overlay Chart', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                pw.Text('Sensor Overlay Chart',
+                    style: pw.TextStyle(
+                        fontSize: 14, fontWeight: pw.FontWeight.bold)),
                 pw.SizedBox(height: 8),
                 pw.Container(
                   padding: const pw.EdgeInsets.all(8),
@@ -263,7 +277,8 @@ class DataTabState extends State<DataTab> {
                     border: pw.Border.all(color: PdfColors.grey300),
                     borderRadius: pw.BorderRadius.circular(8),
                   ),
-                  child: pw.Image(pw.MemoryImage(chartBytes), fit: pw.BoxFit.contain),
+                  child: pw.Image(pw.MemoryImage(chartBytes),
+                      fit: pw.BoxFit.contain),
                 ),
                 pw.SizedBox(height: 16),
               ],
@@ -278,28 +293,42 @@ class DataTabState extends State<DataTab> {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text('AI Trend Insight', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold, color: PdfColors.green900)),
+                    pw.Text('AI Trend Insight',
+                        style: pw.TextStyle(
+                            fontSize: 12,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green900)),
                     pw.SizedBox(height: 4),
-                    pw.Text(_aiTrendInsight, style: const pw.TextStyle(fontSize: 10, color: PdfColors.green900)),
+                    pw.Text(_aiTrendInsight,
+                        style: const pw.TextStyle(
+                            fontSize: 10, color: PdfColors.green900)),
                   ],
                 ),
               ),
               pw.SizedBox(height: 20),
-              pw.Text('Metric Log (Selected Parameters)', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Text('Metric Log (Selected Parameters)',
+                  style: pw.TextStyle(
+                      fontSize: 14, fontWeight: pw.FontWeight.bold)),
               pw.SizedBox(height: 8),
               pw.TableHelper.fromTextArray(
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10, color: PdfColors.white),
-                headerDecoration: const pw.BoxDecoration(color: PdfColors.green800),
+                headerStyle: pw.TextStyle(
+                    fontWeight: pw.FontWeight.bold,
+                    fontSize: 10,
+                    color: PdfColors.white),
+                headerDecoration:
+                    const pw.BoxDecoration(color: PdfColors.green800),
                 cellStyle: const pw.TextStyle(fontSize: 9),
                 cellAlignment: pw.Alignment.centerLeft,
-                headers: ['Date', 'Time', 'Parameter', 'Value', 'Status'],
-                data: filteredLogs.map((log) => [
-                  log['date'].toString(),
-                  log['time'].toString(),
-                  log['param'].toString(),
-                  log['val'].toString(),
-                  log['status'].toString(),
-                ]).toList(),
+                headers: const ['Date', 'Time', 'Parameter', 'Value', 'Status'],
+                data: filteredLogs
+                    .map((log) => [
+                          log['date'].toString(),
+                          log['time'].toString(),
+                          log['param'].toString(),
+                          log['val'].toString(),
+                          log['status'].toString(),
+                        ])
+                    .toList(),
               ),
             ];
           },
@@ -313,9 +342,11 @@ class DataTabState extends State<DataTab> {
 
       final pdfBytes = await pdf.save();
       final pdfBase64 = base64Encode(pdfBytes);
-      final fileName = 'SensorHub_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
+      final fileName =
+          'SensorHub_Report_${DateFormat('yyyyMMdd').format(DateTime.now())}.pdf';
 
-      final emailUrl = Uri.parse('https://sensorhub-ai-backend.onrender.com/api/email-report');
+      final emailUrl = Uri.parse(
+          'https://sensorhub-ai-backend.onrender.com/api/email-report');
       final emailRes = await http.post(
         emailUrl,
         headers: {'Content-Type': 'application/json'},
@@ -350,7 +381,8 @@ class DataTabState extends State<DataTab> {
       debugPrint('PDF Export Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Export failed: $e'), backgroundColor: Colors.red),
         );
       }
     } finally {
@@ -368,12 +400,12 @@ class DataTabState extends State<DataTab> {
 
   DateTime _getEndDate() {
     if (_customDateRange != null) {
-      return DateTime(_customDateRange!.end.year, _customDateRange!.end.month, _customDateRange!.end.day, 23, 59, 59);
+      return DateTime(_customDateRange!.end.year, _customDateRange!.end.month,
+          _customDateRange!.end.day, 23, 59, 59);
     }
     return DateTime.now();
   }
 
-  // Fetch real sensor records from Supabase filtered by `user_id`
   Future<void> _fetchHistoricalData() async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) {
@@ -413,7 +445,6 @@ class DataTabState extends State<DataTab> {
     }
   }
 
-  // Live real-time stream listener isolated by `user_id`
   void _setupDataStream() {
     _dataStreamSub?.cancel();
 
@@ -437,7 +468,7 @@ class DataTabState extends State<DataTab> {
       }).toList();
 
       setState(() {
-        _rawSensorData = filtered;
+        _rawSensorData = List.from(filtered);
       });
       _fetchTrendInsight();
     });
@@ -459,14 +490,19 @@ class DataTabState extends State<DataTab> {
     if (!_isDataActive) {
       return Text(
         widget.isLoggedIn ? 'Waiting for profile setup.' : 'System offline.',
-        style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic),
+        style: TextStyle(
+            color: Colors.grey.shade500,
+            fontSize: 11,
+            fontStyle: FontStyle.italic),
       );
     }
 
     String message;
     if (_customDateRange != null) {
-      String startDate = DateFormat('MMM dd, yyyy').format(_customDateRange!.start);
-      String endDate = DateFormat('MMM dd, yyyy').format(_customDateRange!.end);
+      String startDate =
+          DateFormat('MMM dd, yyyy').format(_customDateRange!.start);
+      String endDate =
+          DateFormat('MMM dd, yyyy').format(_customDateRange!.end);
       message = 'showing data from $startDate until $endDate';
     } else {
       message = 'showing data for: $_selectedDateRange';
@@ -474,7 +510,10 @@ class DataTabState extends State<DataTab> {
 
     return Text(
       message,
-      style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontStyle: FontStyle.italic),
+      style: TextStyle(
+          color: Colors.grey.shade500,
+          fontSize: 11,
+          fontStyle: FontStyle.italic),
     );
   }
 
@@ -492,7 +531,7 @@ class DataTabState extends State<DataTab> {
   Future<void> _pickDateRange() async {
     if (!_isDataActive) return;
 
-    final DateTimeRange? pickedRange = await showDialog<DateTimeRange>(
+    final pickedRange = await showDialog(
       context: context,
       builder: (context) => _CustomDateRangeDialog(
         initialRange: _customDateRange ??
@@ -503,7 +542,7 @@ class DataTabState extends State<DataTab> {
       ),
     );
 
-    if (pickedRange != null) {
+    if (pickedRange != null && pickedRange is DateTimeRange) {
       setState(() {
         _customDateRange = pickedRange;
         _selectedDateRange =
@@ -553,13 +592,23 @@ class DataTabState extends State<DataTab> {
           Text(
             'ECO-SYSTEM INTELLIGENCE',
             textAlign: TextAlign.center,
-            style: TextStyle(color: _isDataActive ? const Color(0xFF047857) : Colors.grey, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2),
+            style: TextStyle(
+                color: _isDataActive ? const Color(0xFF047857) : Colors.grey,
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 2),
           ),
           const SizedBox(height: 4),
           Text(
             'Historical Analysis',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade700, height: 1.1),
+            style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.w900,
+                color: _isDataActive
+                    ? const Color(0xFF022C22)
+                    : Colors.grey.shade700,
+                height: 1.1),
           ),
         ],
       ),
@@ -567,7 +616,8 @@ class DataTabState extends State<DataTab> {
   }
 
   Widget _buildFilterAndExportRow() {
-    final bool canExport = _isDataActive && _rawSensorData.isNotEmpty && !_isExporting;
+    final bool canExport =
+        _isDataActive && _rawSensorData.isNotEmpty && !_isExporting;
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -591,20 +641,24 @@ class DataTabState extends State<DataTab> {
         ElevatedButton(
           onPressed: canExport ? _exportPdfReport : null,
           style: ElevatedButton.styleFrom(
-            backgroundColor: canExport ? const Color(0xFF065F46) : Colors.grey.shade300,
+            backgroundColor:
+                canExport ? const Color(0xFF065F46) : Colors.grey.shade300,
             foregroundColor: canExport ? Colors.white : Colors.grey.shade500,
             elevation: canExport ? 3 : 0,
             shadowColor: const Color(0xFF064E3B).withOpacity(0.4),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           ),
           child: _isExporting
               ? const SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 )
-              : const Text('Export Report', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+              : const Text('Export Report',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         )
       ],
     );
@@ -627,9 +681,14 @@ class DataTabState extends State<DataTab> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? Colors.green.shade50 : (_isDataActive ? Colors.white.withOpacity(0.8) : Colors.grey.shade100),
+          color: isSelected
+              ? Colors.green.shade50
+              : (_isDataActive
+                  ? Colors.white.withOpacity(0.8)
+                  : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: isSelected ? Colors.green.shade400 : Colors.grey.shade300),
+          border: Border.all(
+              color: isSelected ? Colors.green.shade400 : Colors.grey.shade300),
         ),
         child: Row(
           children: [
@@ -637,13 +696,19 @@ class DataTabState extends State<DataTab> {
               Icon(Icons.check_circle, color: Colors.green.shade700, size: 14),
               const SizedBox(width: 6),
             ] else ...[
-              Icon(Icons.calendar_today, color: _isDataActive ? Colors.green.shade700 : Colors.grey, size: 14),
+              Icon(Icons.calendar_today,
+                  color: _isDataActive ? Colors.green.shade700 : Colors.grey,
+                  size: 14),
               const SizedBox(width: 6),
             ],
             Text(
               label,
               style: TextStyle(
-                color: _isDataActive ? (isSelected ? Colors.green.shade800 : const Color(0xFF064E3B)) : Colors.grey,
+                color: _isDataActive
+                    ? (isSelected
+                        ? Colors.green.shade800
+                        : const Color(0xFF064E3B))
+                    : Colors.grey,
                 fontWeight: FontWeight.bold,
                 fontSize: 12,
               ),
@@ -661,7 +726,12 @@ class DataTabState extends State<DataTab> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.green.shade50),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -669,13 +739,24 @@ class DataTabState extends State<DataTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Parameters', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade600)),
+              Text('Parameters',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: _isDataActive
+                          ? const Color(0xFF022C22)
+                          : Colors.grey.shade600)),
               InkWell(
-                onTap: _isDataActive ? () => _toggleAll(!_isAllSelected) : null,
+                onTap:
+                    _isDataActive ? () => _toggleAll(!_isAllSelected) : null,
                 borderRadius: BorderRadius.circular(4),
                 child: Row(
                   children: [
-                    Text('Select All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.grey.shade600)),
+                    Text('Select All',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.grey.shade600)),
                     const SizedBox(width: 8),
                     SizedBox(
                       height: 20,
@@ -684,7 +765,8 @@ class DataTabState extends State<DataTab> {
                         value: _isAllSelected && _isDataActive,
                         onChanged: _isDataActive ? _toggleAll : null,
                         activeColor: Colors.green.shade600,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(4)),
                       ),
                     ),
                   ],
@@ -718,7 +800,8 @@ class DataTabState extends State<DataTab> {
     );
   }
 
-  Widget _buildCheckboxRow(String title, bool value, Function(bool?) onChanged) {
+  Widget _buildCheckboxRow(
+      String title, bool value, Function(bool?) onChanged) {
     return InkWell(
       onTap: _isDataActive ? () => onChanged(!value) : null,
       borderRadius: BorderRadius.circular(8),
@@ -727,7 +810,11 @@ class DataTabState extends State<DataTab> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey, fontSize: 14)),
+            Text(title,
+                style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey,
+                    fontSize: 14)),
             SizedBox(
               height: 20,
               width: 20,
@@ -735,7 +822,8 @@ class DataTabState extends State<DataTab> {
                 value: value && _isDataActive,
                 onChanged: _isDataActive ? onChanged : null,
                 activeColor: Colors.green.shade600,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4)),
               ),
             )
           ],
@@ -751,22 +839,32 @@ class DataTabState extends State<DataTab> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.green.shade50),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Sensor Overlays', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade600)),
-                  Text('Aggregated live telemetry from ESP32', style: TextStyle(fontSize: 12, color: _isDataActive ? Colors.green.shade800.withOpacity(0.7) : Colors.grey.shade500)),
-                ],
-              ),
+              Text('Sensor Overlays',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                      color: _isDataActive
+                          ? const Color(0xFF022C22)
+                          : Colors.grey.shade600)),
+              Text('Aggregated live telemetry from ESP32',
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: _isDataActive
+                          ? Colors.green.shade800.withOpacity(0.7)
+                          : Colors.grey.shade500)),
             ],
           ),
           const SizedBox(height: 16),
@@ -786,13 +884,18 @@ class DataTabState extends State<DataTab> {
                     height: 180,
                     width: double.infinity,
                     child: _isLoadingData
-                        ? const Center(child: CircularProgressIndicator(color: Color(0xFF047857)))
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                                color: Color(0xFF047857)))
                         : (_rawSensorData.isEmpty
                             ? Center(
                                 child: Text(
                                   'No sensor data in database for this account yet.',
                                   textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                      color: Colors.grey.shade400,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
                                 ),
                               )
                             : CustomPaint(
@@ -812,63 +915,206 @@ class DataTabState extends State<DataTab> {
             ),
           ),
           const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _isDataActive ? Colors.green.shade50 : Colors.grey.shade100,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.green.shade100.withOpacity(0.5)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.psychology, color: _isDataActive ? Colors.green.shade700 : Colors.grey.shade400, size: 24),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text('AI Insight', style: TextStyle(fontWeight: FontWeight.bold, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade600, fontSize: 14)),
-                          if (_isAnalyzingTrend) ...[
-                            const SizedBox(width: 8),
-                            SizedBox(
-                              width: 12,
-                              height: 12,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.green.shade700),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _aiTrendInsight,
-                        style: TextStyle(color: _isDataActive ? Colors.green.shade800.withOpacity(0.8) : Colors.grey.shade500, fontSize: 12, height: 1.4),
-                      ),
-                    ],
-                  ),
-                )
-              ],
-            ),
-          )
+          _buildAiInsightSection(),
         ],
       ),
     );
   }
 
+  Widget _buildAiInsightSection() {
+    final String rawText = _aiTrendInsight.trim();
+    final String lower = rawText.toLowerCase();
+
+    final bool isAlert = _isDataActive &&
+        (lower.contains('severely') ||
+            lower.contains('exceeding') ||
+            lower.contains('immediately') ||
+            lower.contains('warning') ||
+            lower.contains('danger') ||
+            lower.contains('fungal') ||
+            lower.contains('low') ||
+            lower.contains('dry'));
+
+    final Color accentColor = !_isDataActive
+        ? Colors.grey.shade600
+        : (isAlert ? const Color(0xFFB45309) : const Color(0xFF065F46));
+    final Color bgColor = !_isDataActive
+        ? Colors.grey.shade100
+        : (isAlert ? const Color(0xFFFFFBEB) : Colors.green.shade50);
+    final Color borderColor = !_isDataActive
+        ? Colors.grey.shade300
+        : (isAlert
+            ? const Color(0xFFFDE68A)
+            : Colors.green.shade200.withOpacity(0.7));
+
+    final RegExpMatch? firstBreak = RegExp(r'[.!?]\s+').firstMatch(rawText);
+    final bool hasMultipleSentences =
+        firstBreak != null && firstBreak.end < rawText.length;
+    final String summarySentence = hasMultipleSentences
+        ? rawText.substring(0, firstBreak.start + 1).trim()
+        : rawText;
+    final String actionSentence = hasMultipleSentences
+        ? rawText.substring(firstBreak.end).trim()
+        : '';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.psychology_rounded, color: accentColor, size: 22),
+                  const SizedBox(width: 8),
+                  Text(
+                    'AI Insight',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w800,
+                      color: accentColor,
+                      fontSize: 15,
+                    ),
+                  ),
+                  if (_isAnalyzingTrend) ...[
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 12,
+                      height: 12,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: accentColor),
+                    ),
+                  ],
+                ],
+              ),
+              if (_isDataActive &&
+                  !_isAnalyzingTrend &&
+                  _rawSensorData.isNotEmpty)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: accentColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    isAlert ? 'ACTION NEEDED' : 'OPTIMAL',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.6,
+                      color: accentColor,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: borderColor),
+          const SizedBox(height: 10),
+          if (hasMultipleSentences) ...[
+            _buildStructuredInsightRow(
+              icon: Icons.analytics_outlined,
+              label: 'Summary: ',
+              text: summarySentence,
+              labelColor: accentColor,
+            ),
+            const SizedBox(height: 8),
+            _buildStructuredInsightRow(
+              icon: isAlert
+                  ? Icons.bolt_rounded
+                  : Icons.check_circle_outline_rounded,
+              label: isAlert ? 'Recommended Action: ' : 'Status: ',
+              text: actionSentence,
+              labelColor: isAlert
+                  ? const Color(0xFFB45309)
+                  : const Color(0xFF065F46),
+            ),
+          ] else
+            Text(
+              rawText,
+              style: TextStyle(
+                color: _isDataActive
+                    ? const Color(0xFF1F2937)
+                    : Colors.grey.shade600,
+                fontSize: 12.5,
+                height: 1.45,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStructuredInsightRow({
+    required IconData icon,
+    required String label,
+    required String text,
+    required Color labelColor,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Icon(icon, size: 15, color: labelColor),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: RichText(
+            text: TextSpan(
+              style: const TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                color: Color(0xFF1F2937),
+              ),
+              children: [
+                TextSpan(
+                  text: label,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: labelColor,
+                  ),
+                ),
+                TextSpan(text: text),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildDynamicLegend() {
     if (_activeParams.isEmpty) {
-      return Center(child: Text('No parameters selected', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)));
+      return Center(
+          child: Text('No parameters selected',
+              style: TextStyle(color: Colors.grey.shade400, fontSize: 12)));
     }
 
     return Wrap(
       alignment: WrapAlignment.center,
       spacing: 14.0,
       runSpacing: 8.0,
-      children: _activeParams
-          .map((p) => _buildChartLegendItem(_paramColors[p]!, p.toString().toUpperCase()))
-          .toList(),
+      children: [
+        if (_showLight)
+          _buildChartLegendItem(_paramColors['Light']!, 'LIGHT'),
+        if (_showHumidity)
+          _buildChartLegendItem(_paramColors['Humidity']!, 'HUMIDITY'),
+        if (_showPh)
+          _buildChartLegendItem(_paramColors['pH Value']!, 'PH VALUE'),
+        if (_showMoisture)
+          _buildChartLegendItem(_paramColors['Soil Moisture']!, 'SOIL MOISTURE'),
+        if (_showTemp)
+          _buildChartLegendItem(_paramColors['Temperature']!, 'TEMPERATURE'),
+      ],
     );
   }
 
@@ -878,18 +1124,23 @@ class DataTabState extends State<DataTab> {
       children: [
         CircleAvatar(radius: 5, backgroundColor: color),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+        Text(label,
+            style: const TextStyle(
+                fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
       ],
     );
   }
 
   Widget _buildDynamicXAxisRow() {
     if (!_isDataActive || _rawSensorData.isEmpty) {
-      return Row(
+      return const Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: ['--', '--', '--', '--']
-            .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
-            .toList(),
+        children: [
+          Text('--', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+          Text('--', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+          Text('--', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+          Text('--', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)),
+        ],
       );
     }
 
@@ -898,29 +1149,54 @@ class DataTabState extends State<DataTab> {
       DateTime last = DateTime.parse(_rawSensorData.last['created_at']);
       Duration diff = last.difference(first);
 
-      DateTime p2 = first.add(Duration(milliseconds: (diff.inMilliseconds * 0.33).round()));
-      DateTime p3 = first.add(Duration(milliseconds: (diff.inMilliseconds * 0.66).round()));
+      DateTime p2 =
+          first.add(Duration(milliseconds: (diff.inMilliseconds * 0.33).round()));
+      DateTime p3 =
+          first.add(Duration(milliseconds: (diff.inMilliseconds * 0.66).round()));
 
       final fmt = DateFormat('MM/dd');
+      const axisStyle = TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey);
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [fmt.format(first), fmt.format(p2), fmt.format(p3), fmt.format(last)]
-            .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
-            .toList(),
+        children: [
+          Text(fmt.format(first), style: axisStyle),
+          Text(fmt.format(p2), style: axisStyle),
+          Text(fmt.format(p3), style: axisStyle),
+          Text(fmt.format(last), style: axisStyle),
+        ],
       );
     }
 
-    final labels = _selectedDateRange == 'Last 7 Days'
-        ? ['Day 1', 'Day 3', 'Day 5', 'Day 7']
-        : (_selectedDateRange == 'Last 30 Days'
-            ? ['Week 1', 'Week 2', 'Week 3', 'Week 4']
-            : ['Start', 'Mid', 'End']);
+    const axisStyle = TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey);
+    if (_selectedDateRange == 'Last 7 Days') {
+      return const Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('Day 1', style: axisStyle),
+          Text('Day 3', style: axisStyle),
+          Text('Day 5', style: axisStyle),
+          Text('Day 7', style: axisStyle),
+        ],
+      );
+    } else if (_selectedDateRange == 'Last 30 Days') {
+      return const Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text('Week 1', style: axisStyle),
+          Text('Week 2', style: axisStyle),
+          Text('Week 3', style: axisStyle),
+          Text('Week 4', style: axisStyle),
+        ],
+      );
+    }
 
-    return Row(
+    return const Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: labels
-          .map((l) => Text(l, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey)))
-          .toList(),
+      children: [
+        Text('Start', style: axisStyle),
+        Text('Mid', style: axisStyle),
+        Text('End', style: axisStyle),
+      ],
     );
   }
 
@@ -929,14 +1205,18 @@ class DataTabState extends State<DataTab> {
       return [];
     }
 
-    final targetParams = (!forceSelectedOnly && _showAllLogSensors) ? _paramColors.keys.toList() : _activeParams;
+    final targetParams = (!forceSelectedOnly && _showAllLogSensors)
+        ? _paramColors.keys.toList()
+        : _activeParams;
     if (targetParams.isEmpty) return [];
 
     final logList = [];
     final reversed = _rawSensorData.reversed.toList();
 
     for (var row in reversed) {
-      DateTime dt = DateTime.tryParse(row['created_at']?.toString() ?? '')?.toLocal() ?? DateTime.now();
+      DateTime dt = DateTime.tryParse(row['created_at']?.toString() ?? '')
+              ?.toLocal() ??
+          DateTime.now();
       String dateStr = DateFormat('MMM dd, yyyy').format(dt);
       String timeStr = DateFormat('HH:mm').format(dt);
 
@@ -955,7 +1235,8 @@ class DataTabState extends State<DataTab> {
         });
       }
 
-      if (targetParams.contains('Soil Moisture') && row['soil_moisture'] != null) {
+      if (targetParams.contains('Soil Moisture') &&
+          row['soil_moisture'] != null) {
         int val = (row['soil_moisture'] as num).toInt();
         bool isOpt = val >= 70 && val <= 90;
         logList.add({
@@ -1028,7 +1309,12 @@ class DataTabState extends State<DataTab> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.green.shade50),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 4))
+        ],
       ),
       child: Column(
         children: [
@@ -1037,28 +1323,47 @@ class DataTabState extends State<DataTab> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Metric Log', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: _isDataActive ? const Color(0xFF022C22) : Colors.grey.shade600)),
+                Text('Metric Log',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: _isDataActive
+                            ? const Color(0xFF022C22)
+                            : Colors.grey.shade600)),
                 Row(
                   children: [
                     IconButton(
-                      icon: Icon(Icons.calendar_month, color: _isDataActive ? Colors.green.shade700 : Colors.grey),
+                      icon: Icon(Icons.calendar_month,
+                          color: _isDataActive
+                              ? Colors.green.shade700
+                              : Colors.grey),
                       onPressed: _pickDateRange,
                       tooltip: 'Select Custom Date',
                     ),
                     InkWell(
-                      onTap: _isDataActive ? () => setState(() => _showAllLogSensors = !_showAllLogSensors) : null,
+                      onTap: _isDataActive
+                          ? () => setState(
+                              () => _showAllLogSensors = !_showAllLogSensors)
+                          : null,
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: (_showAllLogSensors && _isDataActive) ? Colors.green.shade700 : (_isDataActive ? Colors.green.shade50 : Colors.grey.shade200),
+                          color: (_showAllLogSensors && _isDataActive)
+                              ? Colors.green.shade700
+                              : (_isDataActive
+                                  ? Colors.green.shade50
+                                  : Colors.grey.shade200),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(color: Colors.green.shade100),
                         ),
                         child: Text(
                           'All Sensors',
                           style: TextStyle(
-                            color: (_showAllLogSensors && _isDataActive) ? Colors.white : Colors.grey.shade600,
+                            color: (_showAllLogSensors && _isDataActive)
+                                ? Colors.white
+                                : Colors.grey.shade600,
                             fontSize: 10,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1086,13 +1391,15 @@ class DataTabState extends State<DataTab> {
               thumbVisibility: true,
               thickness: 6,
               radius: const Radius.circular(10),
-              notificationPredicate: (notif) => notif.metrics.axis == Axis.vertical,
+              notificationPredicate: (notif) =>
+                  notif.metrics.axis == Axis.vertical,
               child: Scrollbar(
                 controller: _tableHorizontalScroll,
                 thumbVisibility: true,
                 thickness: 6,
                 radius: const Radius.circular(10),
-                notificationPredicate: (notif) => notif.metrics.axis == Axis.horizontal,
+                notificationPredicate: (notif) =>
+                    notif.metrics.axis == Axis.horizontal,
                 child: SingleChildScrollView(
                   controller: _tableVerticalScroll,
                   scrollDirection: Axis.vertical,
@@ -1102,21 +1409,68 @@ class DataTabState extends State<DataTab> {
                     child: Padding(
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: DataTable(
-                        headingRowColor: WidgetStateProperty.all(Colors.green.shade50.withOpacity(0.5)),
+                        headingRowColor: WidgetStateProperty.all(
+                            Colors.green.shade50.withOpacity(0.5)),
                         dataRowMinHeight: 52,
                         dataRowMaxHeight: 52,
                         dividerThickness: 1,
                         columns: const [
-                          DataColumn(label: Text('DATE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                          DataColumn(label: Text('TIME', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                          DataColumn(label: Text('PARAMETER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                          DataColumn(label: Text('VALUE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
-                          DataColumn(label: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.grey, letterSpacing: 1))),
+                          DataColumn(
+                              label: Text('DATE',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.grey,
+                                      letterSpacing: 1))),
+                          DataColumn(
+                              label: Text('TIME',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.grey,
+                                      letterSpacing: 1))),
+                          DataColumn(
+                              label: Text('PARAMETER',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.grey,
+                                      letterSpacing: 1))),
+                          DataColumn(
+                              label: Text('VALUE',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.grey,
+                                      letterSpacing: 1))),
+                          DataColumn(
+                              label: Text('STATUS',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w900,
+                                      color: Colors.grey,
+                                      letterSpacing: 1))),
                         ],
                         rows: filteredLogs.isEmpty
-                            ? [const DataRow(cells: [DataCell(Text('')), DataCell(Text('')), DataCell(Text('No Records Found')), DataCell(Text('')), DataCell(Text(''))])]
+                            ? [
+                                const DataRow(cells: [
+                                  DataCell(Text('')),
+                                  DataCell(Text('')),
+                                  DataCell(Text('No Records Found')),
+                                  DataCell(Text('')),
+                                  DataCell(Text(''))
+                                ])
+                              ]
                             : filteredLogs
-                                .map((log) => _buildDataRow(log['date'], log['time'], log['param'], log['val'], log['status'], log['cBg'], log['cTxt'], log['cDot']))
+                                .map((log) => _buildDataRow(
+                                    log['date'],
+                                    log['time'],
+                                    log['param'],
+                                    log['val'],
+                                    log['status'],
+                                    log['cBg'],
+                                    log['cTxt'],
+                                    log['cDot']))
                                 .toList(),
                       ),
                     ),
@@ -1130,23 +1484,46 @@ class DataTabState extends State<DataTab> {
     );
   }
 
-  DataRow _buildDataRow(String date, String time, String param, String val, String status, Color chipBg, Color chipText, Color dotColor) {
+  DataRow _buildDataRow(String date, String time, String param, String val,
+      String status, Color chipBg, Color chipText, Color dotColor) {
     return DataRow(
       cells: [
-        DataCell(Text(date, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 12))),
-        DataCell(Text(time, style: const TextStyle(color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))),
-        DataCell(Text(param, style: TextStyle(fontWeight: FontWeight.w700, color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 12))),
-        DataCell(Text(val, style: TextStyle(color: _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500, fontSize: 12, fontWeight: FontWeight.bold))),
+        DataCell(Text(date,
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color:
+                    _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500,
+                fontSize: 12))),
+        DataCell(Text(time,
+            style: const TextStyle(
+                color: Colors.grey, fontSize: 12, fontWeight: FontWeight.bold))),
+        DataCell(Text(param,
+            style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color:
+                    _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500,
+                fontSize: 12))),
+        DataCell(Text(val,
+            style: TextStyle(
+                color:
+                    _isDataActive ? const Color(0xFF064E3B) : Colors.grey.shade500,
+                fontSize: 12,
+                fontWeight: FontWeight.bold))),
         DataCell(
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: chipBg, borderRadius: BorderRadius.circular(20)),
+            decoration: BoxDecoration(
+                color: chipBg, borderRadius: BorderRadius.circular(20)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 CircleAvatar(radius: 3, backgroundColor: dotColor),
                 const SizedBox(width: 6),
-                Text(status, style: TextStyle(color: chipText, fontSize: 11, fontWeight: FontWeight.bold)),
+                Text(status,
+                    style: TextStyle(
+                        color: chipText,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -1159,7 +1536,7 @@ class DataTabState extends State<DataTab> {
 class RealChartPainter extends CustomPainter {
   final List sensorData;
   final List activeParams;
-  final Map<String, Color> paramColors;
+  final Map paramColors;
 
   RealChartPainter({
     required this.sensorData,
@@ -1175,8 +1552,10 @@ class RealChartPainter extends CustomPainter {
       ..style = PaintingStyle.stroke;
 
     canvas.drawLine(const Offset(0, 0), Offset(size.width, 0), gridPaint);
-    canvas.drawLine(Offset(0, size.height / 2), Offset(size.width, size.height / 2), gridPaint);
-    canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), gridPaint);
+    canvas.drawLine(
+        Offset(0, size.height / 2), Offset(size.width, size.height / 2), gridPaint);
+    canvas.drawLine(
+        Offset(0, size.height), Offset(size.width, size.height), gridPaint);
 
     if (sensorData.isEmpty || activeParams.isEmpty) return;
 
@@ -1196,20 +1575,30 @@ class RealChartPainter extends CustomPainter {
         double? rawValue;
 
         if (param == 'Humidity' && row['humidity'] != null) {
-          rawValue = ((row['humidity'] as num).toDouble()).clamp(0.0, 100.0) / 100.0;
+          rawValue =
+              ((row['humidity'] as num).toDouble()).clamp(0.0, 100.0) / 100.0;
         } else if (param == 'Soil Moisture' && row['soil_moisture'] != null) {
-          rawValue = ((row['soil_moisture'] as num).toDouble()).clamp(0.0, 100.0) / 100.0;
+          rawValue =
+              ((row['soil_moisture'] as num).toDouble()).clamp(0.0, 100.0) /
+                  100.0;
         } else if (param == 'Temperature' && row['temperature'] != null) {
-          rawValue = (((row['temperature'] as num).toDouble() - 10.0) / 35.0).clamp(0.0, 1.0);
+          rawValue =
+              (((row['temperature'] as num).toDouble() - 10.0) / 35.0)
+                  .clamp(0.0, 1.0);
         } else if (param == 'Light' && row['light'] != null) {
-          rawValue = ((row['light'] as num).toDouble() / 4095.0).clamp(0.0, 1.0);
+          rawValue =
+              ((row['light'] as num).toDouble() / 4095.0).clamp(0.0, 1.0);
         } else if (param == 'pH Value' && row['ph_value'] != null) {
-          rawValue = ((row['ph_value'] as num).toDouble() / 14.0).clamp(0.0, 1.0);
+          rawValue =
+              ((row['ph_value'] as num).toDouble() / 14.0).clamp(0.0, 1.0);
         }
 
         if (rawValue != null) {
-          double x = sensorData.length == 1 ? size.width / 2 : (i / (sensorData.length - 1)) * size.width;
-          double y = size.height - (rawValue * (size.height * 0.85) + (size.height * 0.07));
+          double x = sensorData.length == 1
+              ? size.width / 2
+              : (i / (sensorData.length - 1)) * size.width;
+          double y = size.height -
+              (rawValue * (size.height * 0.85) + (size.height * 0.07));
 
           if (firstPoint) {
             path.moveTo(x, y);
@@ -1226,7 +1615,8 @@ class RealChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant RealChartPainter oldDelegate) {
-    return oldDelegate.sensorData != sensorData || oldDelegate.activeParams != activeParams;
+    return oldDelegate.sensorData != sensorData ||
+        oldDelegate.activeParams != activeParams;
   }
 }
 
@@ -1276,19 +1666,22 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
     });
   }
 
-  List _buildCalendarDays() {
-    final firstDayOfMonth = DateTime(_focusedMonth.year, _focusedMonth.month, 1);
+  DateTime _dayAtGridIndex(int index) {
+    final firstDayOfMonth =
+        DateTime(_focusedMonth.year, _focusedMonth.month, 1);
     final int leadingDays = firstDayOfMonth.weekday % 7;
     final startGrid = firstDayOfMonth.subtract(Duration(days: leadingDays));
-
-    return List.generate(42, (index) => startGrid.add(Duration(days: index)));
+    return startGrid.add(Duration(days: index));
   }
 
   @override
   Widget build(BuildContext context) {
-    final days = _buildCalendarDays();
     final today = _stripTime(DateTime.now());
-    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const weekHeaderStyle = TextStyle(
+      fontSize: 12,
+      fontWeight: FontWeight.w700,
+      color: Color(0xFF374151),
+    );
 
     return Dialog(
       backgroundColor: Colors.transparent,
@@ -1315,7 +1708,8 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
               children: [
                 _buildNavButton(Icons.chevron_left, () {
                   setState(() {
-                    _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month - 1);
+                    _focusedMonth =
+                        DateTime(_focusedMonth.year, _focusedMonth.month - 1);
                   });
                 }),
                 Text(
@@ -1328,28 +1722,24 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
                 ),
                 _buildNavButton(Icons.chevron_right, () {
                   setState(() {
-                    _focusedMonth = DateTime(_focusedMonth.year, _focusedMonth.month + 1);
+                    _focusedMonth =
+                        DateTime(_focusedMonth.year, _focusedMonth.month + 1);
                   });
                 }),
               ],
             ),
             const SizedBox(height: 18),
-            Row(
+            const Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: weekDays
-                  .map((w) => SizedBox(
-                        width: 40,
-                        child: Text(
-                          w,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF374151),
-                          ),
-                        ),
-                      ))
-                  .toList(),
+              children: [
+                SizedBox(width: 40, child: Text('Sun', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                SizedBox(width: 40, child: Text('Mon', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                SizedBox(width: 40, child: Text('Tue', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                SizedBox(width: 40, child: Text('Wed', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                SizedBox(width: 40, child: Text('Thu', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                SizedBox(width: 40, child: Text('Fri', textAlign: TextAlign.center, style: weekHeaderStyle)),
+                SizedBox(width: 40, child: Text('Sat', textAlign: TextAlign.center, style: weekHeaderStyle)),
+              ],
             ),
             const SizedBox(height: 8),
             Divider(height: 1, color: Colors.grey.shade200),
@@ -1357,14 +1747,14 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
             GridView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: days.length,
+              itemCount: 42,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 7,
                 mainAxisSpacing: 6,
                 childAspectRatio: 1.05,
               ),
               itemBuilder: (context, index) {
-                final DateTime day = days[index];
+                final DateTime day = _dayAtGridIndex(index);
                 final isCurrentMonth = day.month == _focusedMonth.month;
                 final isFuture = day.isAfter(today);
                 final isStart = _isSameDay(day, _startDate);
@@ -1373,7 +1763,9 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
                     _endDate != null &&
                     day.isAfter(_startDate!) &&
                     day.isBefore(_endDate!);
-                final hasRange = _startDate != null && _endDate != null && !_isSameDay(_startDate, _endDate);
+                final hasRange = _startDate != null &&
+                    _endDate != null &&
+                    !_isSameDay(_startDate, _endDate);
 
                 BoxDecoration? rangeDecoration;
                 if (isInRange) {
@@ -1381,12 +1773,14 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
                 } else if (isStart && hasRange) {
                   rangeDecoration = BoxDecoration(
                     color: _softGreen,
-                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(20)),
+                    borderRadius:
+                        const BorderRadius.horizontal(left: Radius.circular(20)),
                   );
                 } else if (isEnd && hasRange) {
                   rangeDecoration = BoxDecoration(
                     color: _softGreen,
-                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(20)),
+                    borderRadius:
+                        const BorderRadius.horizontal(right: Radius.circular(20)),
                   );
                 }
 
@@ -1400,13 +1794,16 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
                       height: 34,
                       alignment: Alignment.center,
                       decoration: (isStart || isEnd)
-                          ? BoxDecoration(color: _primaryGreen, shape: BoxShape.circle)
+                          ? BoxDecoration(
+                              color: _primaryGreen, shape: BoxShape.circle)
                           : null,
                       child: Text(
                         '${day.day}',
                         style: TextStyle(
                           fontSize: 13,
-                          fontWeight: (isStart || isEnd || isInRange) ? FontWeight.bold : FontWeight.w500,
+                          fontWeight: (isStart || isEnd || isInRange)
+                              ? FontWeight.bold
+                              : FontWeight.w500,
                           color: (isStart || isEnd)
                               ? Colors.white
                               : (isFuture || !isCurrentMonth)
@@ -1425,7 +1822,10 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+                  child: Text('Cancel',
+                      style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
@@ -1444,10 +1844,14 @@ class _CustomDateRangeDialogState extends State<_CustomDateRangeDialog> {
                     backgroundColor: _primaryGreen,
                     foregroundColor: Colors.white,
                     elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 18, vertical: 8),
                   ),
-                  child: const Text('Apply', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  child: const Text('Apply',
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
               ],
             ),
